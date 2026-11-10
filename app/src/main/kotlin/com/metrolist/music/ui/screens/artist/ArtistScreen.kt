@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.artist
 
+import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -69,6 +70,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -183,9 +185,26 @@ fun ArtistScreen(
         }
     }
 
-    val distinctItemsBySection = remember(artistPage?.sections) {
+    val likedSongs by viewModel.likedSongs.collectAsStateWithLifecycle()
+    val extraAlbums by viewModel.extraAlbums.collectAsStateWithLifecycle()
+    val albumsTitle = stringResource(R.string.albums)
+
+    LaunchedEffect(artistPage?.artist?.id) {
+        if (artistPage != null) viewModel.loadExtraAlbums()
+    }
+
+    val distinctItemsBySection = remember(artistPage?.sections, extraAlbums, albumsTitle) {
         artistPage?.sections?.map { section ->
-            section.items.distinctBy { it.id }
+            val items = section.items.distinctBy { it.id }
+            if (extraAlbums.isNotEmpty() &&
+                section.title.equals(albumsTitle, ignoreCase = true) &&
+                items.all { it is AlbumItem }
+            ) {
+                (items + extraAlbums).distinctBy { it.id }
+                    .sortedByDescending { (it as? AlbumItem)?.year ?: 0 }
+            } else {
+                items
+            }
         } ?: emptyList()
     }
 
@@ -551,6 +570,30 @@ fun ArtistScreen(
                     }
                 }
 
+                if (likedSongs.isNotEmpty()) {
+                    item(key = "liked_songs_title") {
+                        NavigationTitle(
+                            title = stringResource(R.string.liked_songs),
+                            modifier = Modifier.animateItem(),
+                            onClick = {
+                                navController.navigate("artist/${viewModel.artistId}/liked")
+                            },
+                        )
+                    }
+                    item(key = "liked_songs_count") {
+                        Text(
+                            text = pluralStringResource(R.plurals.n_song, likedSongs.size, likedSongs.size),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier =
+                                Modifier
+                                    .animateItem()
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 8.dp),
+                        )
+                    }
+                }
+
                 if (showLocal) {
                     if (librarySongs.isNotEmpty()) {
                         item(key = "local_songs_title") {
@@ -682,18 +725,27 @@ fun ArtistScreen(
                 } else {
                     artistPage?.sections?.forEachIndexed { index, section ->
                         if (section.items.isNotEmpty()) {
+                            val sectionTitleClick: (() -> Unit)? =
+                                section.moreEndpoint?.let { endpoint ->
+                                    {
+                                        navController.navigate(
+                                            "artist/${viewModel.artistId}/items?browseId=${endpoint.browseId}?params=${endpoint.params}",
+                                        )
+                                    }
+                                } ?: if (section.items.all { it is AlbumItem }) {
+                                    {
+                                        navController.navigate(
+                                            "artist/${viewModel.artistId}/section?title=${Uri.encode(section.title)}",
+                                        )
+                                    }
+                                } else {
+                                    null
+                                }
                             item(key = "section_${section.title}") {
                                 NavigationTitle(
                                     title = section.title,
                                     modifier = Modifier.animateItem(),
-                                    onClick =
-                                        section.moreEndpoint?.let {
-                                            {
-                                                navController.navigate(
-                                                    "artist/${viewModel.artistId}/items?browseId=${it.browseId}?params=${it.params}",
-                                                )
-                                            }
-                                        },
+                                    onClick = sectionTitleClick,
                                 )
                             }
                         }
