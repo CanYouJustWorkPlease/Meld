@@ -110,28 +110,51 @@ class ArtistViewModel @Inject constructor(
     // main version of an album, so deluxe/re-release versions are missing from it.
     private val _extraAlbums = MutableStateFlow<List<AlbumItem>>(emptyList())
     val extraAlbums = _extraAlbums.asStateFlow()
-    private var extraAlbumsLoaded = false
+    private var extraAlbumsJob: kotlinx.coroutines.Job? = null
 
+    /**
+     * Looks up the artist's albums via search. Safe to call repeatedly (e.g. when the page is
+     * refreshed): it reuses a cached result, retries when searches fail, and only runs one lookup
+     * at a time.
+     */
     fun loadExtraAlbums() {
-        if (extraAlbumsLoaded) return
         val page = artistPage ?: return
-        extraAlbumsLoaded = true
         val name = page.artist.title
         val ytId = page.artist.id
-        viewModelScope.launch {
+        val key = ytId.ifBlank { name.lowercase() }
+
+        extraAlbumsCache[key]?.let {
+            if (_extraAlbums.value != it) _extraAlbums.value = it
+            return
+        }
+        if (extraAlbumsJob?.isActive == true) return
+
+        extraAlbumsJob = viewModelScope.launch {
             val found = mutableListOf<AlbumItem>()
-            for (query in listOf(name, "$name deluxe")) {
-                YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM).onSuccess { result ->
-                    result.items.filterIsInstance<AlbumItem>().forEach { album ->
-                        val byArtist = album.artists?.any {
-                            it.id == ytId || it.name.equals(name, ignoreCase = true)
-                        } == true
-                        if (byArtist) found += album
-                    }
+            var succeeded = 0
+            for (query in listOf(name, "$name deluxe", "$name album")) {
+                var ok = false
+                repeat(3) { attempt ->
+                    if (ok) return@repeat
+                    YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM)
+                        .onSuccess { result ->
+                            ok = true
+                            result.items.filterIsInstance<AlbumItem>().forEach { album ->
+                                val byArtist = album.artists?.any {
+                                    it.id == ytId || it.name.equals(name, ignoreCase = true)
+                                } == true
+                                if (byArtist) found += album
+                            }
+                        }
+                        .onFailure { reportException(it) }
+                    if (!ok) kotlinx.coroutines.delay(1000L * (attempt + 1))
                 }
+                if (ok) succeeded++
             }
-            val known = page.sections.flatMap { it.items }.map { it.id }.toSet()
-            _extraAlbums.value = found.distinctBy { it.id }.filter { it.id !in known }
+            val albums = found.distinctBy { it.id }
+            if (albums.isNotEmpty()) _extraAlbums.value = albums
+            // Only remember a result when every search worked, so a partial/failed lookup is retried.
+            if (succeeded == 3) extraAlbumsCache[key] = albums
         }
     }
 
@@ -396,3 +419,5 @@ class ArtistViewModel @Inject constructor(
         }
     }
 }
+
+private val extraAlbumsCache = java.util.concurrent.ConcurrentHashMap<String, List<AlbumItem>>()
