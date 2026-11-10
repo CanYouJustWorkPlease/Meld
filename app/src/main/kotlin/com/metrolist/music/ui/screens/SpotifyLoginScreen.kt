@@ -42,11 +42,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -98,6 +100,58 @@ fun SpotifyLoginScreen(navController: NavController) {
     var hasError by remember { mutableStateOf(false) }
     var retryCount by remember { mutableIntStateOf(0) }
     val tokenFetchStarted = remember { AtomicBoolean(false) }
+    var showCookieDialog by remember { mutableStateOf(false) }
+    var cookieInput by remember { mutableStateOf("") }
+
+    if (showCookieDialog) {
+        AlertDialog(
+            onDismissRequest = { showCookieDialog = false },
+            title = { Text("Log in with sp_dc cookie") },
+            text = {
+                Column {
+                    Text(
+                        "Log in at open.spotify.com in your normal browser, copy the value " +
+                            "of the sp_dc cookie and paste it here. Treat it like a password.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = cookieInput,
+                        onValueChange = { cookieInput = it },
+                        label = { Text("sp_dc") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = cookieInput.isNotBlank(),
+                    onClick = {
+                        val pasted = cookieInput
+                        cookieInput = ""
+                        showCookieDialog = false
+                        if (tokenFetchStarted.compareAndSet(false, true)) {
+                            extractAndFetchToken(
+                                view = null,
+                                context = context,
+                                scope = scope,
+                                navController = navController,
+                                setProcessing = { isProcessing = it },
+                                setStatus = { statusMessage = it },
+                                setError = { hasError = it },
+                                tokenFetchStarted = tokenFetchStarted,
+                                spDcOverride = pasted,
+                            )
+                        }
+                    },
+                ) { Text("Log in") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCookieDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -109,6 +163,9 @@ fun SpotifyLoginScreen(navController: NavController) {
                 ) {
                     Icon(painterResource(R.drawable.arrow_back), contentDescription = null)
                 }
+            },
+            actions = {
+                TextButton(onClick = { showCookieDialog = true }) { Text("Use cookie") }
             },
         )
 
@@ -702,6 +759,7 @@ private fun extractAndFetchToken(
     setStatus: (String) -> Unit,
     setError: (Boolean) -> Unit,
     tokenFetchStarted: AtomicBoolean,
+    spDcOverride: String? = null,
 ) {
     val bl = BrokenLogin.nextId("token")
     val cookieManager = CookieManager.getInstance()
@@ -719,7 +777,15 @@ private fun extractAndFetchToken(
             }
         }?.toMap() ?: emptyMap()
 
-    val spDc = cookieMap["sp_dc"]
+    // A cookie pasted by the user (e.g. from a normal browser login) wins over the WebView
+    // cookie. Accept either the bare value or the full "sp_dc=VALUE" form.
+    val spDc = spDcOverride
+        ?.trim()
+        ?.removePrefix("sp_dc=")
+        ?.trim()
+        ?.trimEnd(';')
+        ?.takeIf { it.isNotBlank() }
+        ?: cookieMap["sp_dc"]
     if (spDc.isNullOrBlank()) {
         Timber.w("SpotifyLogin: sp_dc not found in cookies (keys: ${cookieMap.keys})")
         // The login page completed but never produced the session cookie. Whether any cookie at
@@ -809,7 +875,10 @@ private fun extractAndFetchToken(
         } catch (e: Exception) {
             Timber.e(e, "SpotifyLogin: login failed — ${e.message}")
             BrokenLogin.fail(bl, "login.failed", e)
-            val errorMsg = classifyLoginError(context, e)
+            // Show the underlying error too (which step failed + HTTP code), so a failed login
+            // can be diagnosed without adb/logcat.
+            val errorMsg = classifyLoginError(context, e) +
+                "\n\n[" + e.javaClass.simpleName + "] " + e.message.orEmpty().take(300)
             withContext(Dispatchers.Main) {
                 setStatus(errorMsg)
                 setError(true)
