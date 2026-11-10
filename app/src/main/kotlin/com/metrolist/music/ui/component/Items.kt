@@ -1138,11 +1138,12 @@ fun YouTubeListItem(
     trailingContent: @Composable RowScope.() -> Unit = {},
     badges: @Composable RowScope.() -> Unit = {
         val database = LocalDatabase.current
+        // Collect (not just read once) so the heart updates as soon as the song is liked/unliked.
         val song by produceState<Song?>(initialValue = null, item.id) {
-            if (item is SongItem) value = database.song(item.id).firstOrNull()
+            if (item is SongItem) database.song(item.id).collect { value = it }
         }
         val album by produceState<Album?>(initialValue = null, item.id) {
-            if (item is AlbumItem) value = database.album(item.id).firstOrNull()
+            if (item is AlbumItem) database.album(item.id).collect { value = it }
         }
 
         if ((item is SongItem && song?.song?.liked == true) ||
