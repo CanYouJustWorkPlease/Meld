@@ -98,6 +98,43 @@ class ArtistViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // Songs by this artist that the user liked (matched by id or, for artists saved under another
+    // id, by name).
+    val likedSongs = libraryArtist
+        .map { it?.artist?.name.orEmpty() }
+        .distinctUntilChanged()
+        .flatMapLatest { name -> database.likedSongsByArtist(artistId, name) }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Extra albums found by searching YouTube Music for the artist. The artist page only lists the
+    // main version of an album, so deluxe/re-release versions are missing from it.
+    private val _extraAlbums = MutableStateFlow<List<AlbumItem>>(emptyList())
+    val extraAlbums = _extraAlbums.asStateFlow()
+    private var extraAlbumsLoaded = false
+
+    fun loadExtraAlbums() {
+        if (extraAlbumsLoaded) return
+        val page = artistPage ?: return
+        extraAlbumsLoaded = true
+        val name = page.artist.title
+        val ytId = page.artist.id
+        viewModelScope.launch {
+            val found = mutableListOf<AlbumItem>()
+            for (query in listOf(name, "$name deluxe")) {
+                YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM).onSuccess { result ->
+                    result.items.filterIsInstance<AlbumItem>().forEach { album ->
+                        val byArtist = album.artists?.any {
+                            it.id == ytId || it.name.equals(name, ignoreCase = true)
+                        } == true
+                        if (byArtist) found += album
+                    }
+                }
+            }
+            val known = page.sections.flatMap { it.items }.map { it.id }.toSet()
+            _extraAlbums.value = found.distinctBy { it.id }.filter { it.id !in known }
+        }
+    }
+
     init {
         if (isYouTubeArtistId(artistId)) {
             // YouTube artist: load page directly, reload when settings change
