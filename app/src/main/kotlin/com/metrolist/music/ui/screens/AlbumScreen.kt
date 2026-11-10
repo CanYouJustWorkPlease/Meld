@@ -520,6 +520,15 @@ fun AlbumScreen(
                         text = stringResource(R.string.error_unknown),
                         color = MaterialTheme.colorScheme.error,
                     )
+                    // Show the underlying reason (network, timeout, YouTube response...).
+                    fetchError?.takeIf { it.isNotBlank() }?.let { reason ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = reason.take(300),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedButton(onClick = { viewModel.fetchAlbum() }) {
                         Text(stringResource(R.string.retry_button))
