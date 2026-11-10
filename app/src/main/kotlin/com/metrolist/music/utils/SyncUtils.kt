@@ -139,6 +139,7 @@ class SyncUtils @Inject constructor(
         private const val MAX_RETRIES = 3
         private const val INITIAL_RETRY_DELAY_MS = 1000L
         private const val DB_OPERATION_DELAY_MS = 50L
+        private const val RECENT_LIKE_GRACE_MS = 10 * 60 * 1000L
     }
     private fun markPlaylistModifying(playlistId: String) {
         playlistsBeingModified.getOrPut(playlistId) { AtomicInteger(0) }.incrementAndGet()
@@ -295,7 +296,25 @@ class SyncUtils @Inject constructor(
         performFullSync()
     }
 
+    // Songs liked locally a moment ago. The YouTube "liked" playlist can take a while to show a new
+    // like, so the liked-songs sync must not un-like these just because they aren't listed yet.
+    private val recentLocalLikes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun isRecentLocalLike(id: String): Boolean {
+        val at = recentLocalLikes[id] ?: return false
+        if (System.currentTimeMillis() - at > RECENT_LIKE_GRACE_MS) {
+            recentLocalLikes.remove(id)
+            return false
+        }
+        return true
+    }
+
     fun likeSong(s: SongEntity) {
+        if (s.liked) {
+            recentLocalLikes[s.id] = System.currentTimeMillis()
+        } else {
+            recentLocalLikes.remove(s.id)
+        }
         syncScope.launch {
             syncChannel.send(SyncOperation.LikeSong(s))
         }
@@ -610,6 +629,15 @@ class SyncUtils @Inject constructor(
         }
     }
 
+    // The like is queued from inside the DB transaction that saves the song, so the song and its
+    // artists may not be readable yet when this runs. Wait briefly for them.
+    private suspend fun awaitSongWithArtists(id: String) {
+        repeat(10) {
+            if (database.song(id).firstOrNull()?.artists?.isNotEmpty() == true) return
+            kotlinx.coroutines.delay(300)
+        }
+    }
+
     private suspend fun executeLikeSong(s: SongEntity) = withContext(Dispatchers.IO) {
         if (isLoggedIn()) {
             withRetry {
@@ -620,6 +648,8 @@ class SyncUtils @Inject constructor(
         } else {
             Timber.d("YouTube not logged in, skipping YouTube like sync for ${s.id}")
         }
+
+        if (lastfmSendLikes || spotifySyncLikes) awaitSongWithArtists(s.id)
 
         if (lastfmSendLikes) {
             try {
@@ -744,7 +774,7 @@ class SyncUtils @Inject constructor(
                     // only one Flow update with the final state, preventing UI
                     // flickering from intermediate states during sync
                     database.withTransaction {
-                        localSongs.filterNot { it.id in remoteIds }.forEach { song ->
+                        localSongs.filterNot { it.id in remoteIds || isRecentLocalLike(it.id) }.forEach { song ->
                             try {
                                 update(song.song.localToggleLike())
                             } catch (e: Exception) {
