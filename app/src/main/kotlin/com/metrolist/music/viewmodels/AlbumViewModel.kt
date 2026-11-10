@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.AlbumItem
+import com.metrolist.innertube.pages.AlbumPage
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.utils.isSpotifyId
 import com.metrolist.music.utils.reportException
@@ -17,7 +18,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -32,9 +35,15 @@ constructor(
 ) : ViewModel() {
     val albumId = savedStateHandle.get<String>("albumId")!!
     val playlistId = MutableStateFlow("")
+    // The id actually displayed. Normally the same as [albumId], but when that id can't be opened on
+    // YouTube (e.g. a stale/placeholder id saved with a liked song) it is switched to the album found
+    // by searching for its name.
+    private val displayedAlbumId = MutableStateFlow(albumId)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     val albumWithSongs =
-        database
-            .albumWithSongs(albumId)
+        displayedAlbumId
+            .flatMapLatest { database.albumWithSongs(it) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     var otherVersions = MutableStateFlow<List<AlbumItem>>(emptyList())
 
@@ -51,11 +60,20 @@ constructor(
             if (albumId.isSpotifyId()) return@launch
             fetchError.value = null
             val album = database.album(albumId).first()
-            val result = runCatching {
+            var result = runCatching {
                 withTimeout(FETCH_TIMEOUT_MS) {
                     YouTube.album(albumId)
                 }
             }.getOrElse { Result.failure(it) }
+
+            // Fallback: the saved album id can't be opened, so find the album by name + artist.
+            if (result.isFailure && album == null) {
+                val resolved = resolveByName()
+                if (resolved != null) {
+                    displayedAlbumId.value = resolved.album.browseId
+                    result = Result.success(resolved)
+                }
+            }
 
             result
                 .onSuccess {
@@ -86,6 +104,31 @@ constructor(
                     }
                 }
         }
+    }
+
+    private suspend fun resolveByName(): AlbumPage? {
+        val name = database.albumNameFromSongs(albumId)?.takeIf { it.isNotBlank() } ?: return null
+        val artist = database.albumArtistNameFromSongs(albumId)
+        return runCatching {
+            withTimeout(FETCH_TIMEOUT_MS * 2) {
+                val query = listOfNotNull(name, artist).joinToString(" ")
+                val candidates =
+                    YouTube
+                        .search(query, YouTube.SearchFilter.FILTER_ALBUM)
+                        .getOrThrow()
+                        .items
+                        .filterIsInstance<AlbumItem>()
+                val sameTitle = candidates.filter { it.title.equals(name, ignoreCase = true) }
+                val match =
+                    sameTitle.firstOrNull { c ->
+                        artist != null && c.artists?.any { it.name.equals(artist, ignoreCase = true) } == true
+                    } ?: sameTitle.firstOrNull()
+                        ?: candidates.firstOrNull { c ->
+                            artist != null && c.artists?.any { it.name.equals(artist, ignoreCase = true) } == true
+                        }
+                match?.let { YouTube.album(it.browseId).getOrNull() }
+            }
+        }.getOrNull()
     }
 
     companion object {
