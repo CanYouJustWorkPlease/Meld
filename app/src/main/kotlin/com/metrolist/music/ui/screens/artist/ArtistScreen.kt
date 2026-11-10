@@ -189,7 +189,7 @@ fun ArtistScreen(
         } ?: emptyList()
     }
 
-    LaunchedEffect(libraryArtist, artistPage) {
+    LaunchedEffect(libraryArtist, artistPage, librarySongs, libraryAlbums) {
         // Always the local page for local artists. Artists Meld only knows through Spotify have no
         // YouTube page to fall back to, so they keep the remote page instead of rendering empty.
         val isYouTube = libraryArtist?.artist?.isYouTubeArtist == true
@@ -198,7 +198,13 @@ fun ArtistScreen(
         showLocal = when {
             isLocal -> true
             hasSpotifyId && !isYouTube -> false
-            libraryArtist != null && !isYouTube -> true
+            // Non-YouTube ids (e.g. "LA..." ids created for liked songs whose artist had no
+            // channel id) have nothing local unless the songs are in the library. The ViewModel
+            // resolves them on YouTube by name, so use that page whenever it is available and only
+            // fall back to the local page while there is local content and no remote page yet.
+            libraryArtist != null && !isYouTube -> {
+                artistPage == null && (librarySongs.isNotEmpty() || libraryAlbums.isNotEmpty())
+            }
             else -> false
         }
     }
