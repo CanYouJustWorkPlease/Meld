@@ -362,6 +362,36 @@ interface DatabaseDao {
 
     @Transaction
     @Query(
+        """
+        SELECT DISTINCT song.* FROM song
+        JOIN song_artist_map ON song_artist_map.songId = song.id
+        JOIN artist ON artist.id = song_artist_map.artistId
+        WHERE song.liked = 1
+          AND (artist.id = :artistId OR (:artistName != '' AND artist.name = :artistName COLLATE NOCASE))
+        ORDER BY song.likedDate DESC, song.rowId DESC
+        """,
+    )
+    fun likedSongsByArtist(
+        artistId: String,
+        artistName: String,
+    ): Flow<List<Song>>
+
+    @Query("SELECT albumName FROM song WHERE albumId = :albumId AND albumName IS NOT NULL LIMIT 1")
+    suspend fun albumNameFromSongs(albumId: String): String?
+
+    @Query(
+        """
+        SELECT artist.name FROM song
+        JOIN song_artist_map ON song_artist_map.songId = song.id
+        JOIN artist ON artist.id = song_artist_map.artistId
+        WHERE song.albumId = :albumId
+        ORDER BY song_artist_map.position LIMIT 1
+        """,
+    )
+    suspend fun albumArtistNameFromSongs(albumId: String): String?
+
+    @Transaction
+    @Query(
         "SELECT song.* FROM song_artist_map JOIN song ON song_artist_map.songId = song.id WHERE artistId = :artistId AND inLibrary IS NOT NULL LIMIT :previewSize",
     )
     fun artistSongsPreview(
