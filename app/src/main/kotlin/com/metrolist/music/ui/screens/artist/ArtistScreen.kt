@@ -189,7 +189,9 @@ fun ArtistScreen(
     val extraAlbums by viewModel.extraAlbums.collectAsStateWithLifecycle()
     val albumsTitle = stringResource(R.string.albums)
 
-    LaunchedEffect(artistPage?.artist?.id) {
+    // Re-run when the page changes (cached page first, then the fresh one) so a failed or partial
+    // lookup gets another try.
+    LaunchedEffect(artistPage) {
         if (artistPage != null) viewModel.loadExtraAlbums()
     }
 
