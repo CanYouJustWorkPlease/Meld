@@ -27,6 +27,8 @@ import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.PureBlackKey
 import com.metrolist.music.ui.screens.artist.ArtistAlbumsScreen
 import com.metrolist.music.ui.screens.artist.ArtistItemsScreen
+import com.metrolist.music.ui.screens.artist.ArtistLikedSongsScreen
+import com.metrolist.music.ui.screens.artist.ArtistSectionScreen
 import com.metrolist.music.ui.screens.artist.ArtistScreen
 import com.metrolist.music.ui.screens.artist.ArtistSongsScreen
 import com.metrolist.music.ui.screens.equalizer.EqScreen
@@ -237,6 +239,45 @@ fun NavGraphBuilder.navigationBuilder(
             ),
     ) {
         ArtistSongsScreen(navController)
+    }
+
+    composable(
+        route = "artist/{artistId}/liked",
+        arguments =
+            listOf(
+                navArgument("artistId") {
+                    type = NavType.StringType
+                },
+            ),
+    ) {
+        ArtistLikedSongsScreen(navController)
+    }
+
+    composable(
+        route = "artist/{artistId}/section?title={title}",
+        arguments =
+            listOf(
+                navArgument("artistId") {
+                    type = NavType.StringType
+                },
+                navArgument("title") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+    ) { backStackEntry ->
+        // Share the artist page's view model so the already-loaded page is reused.
+        val artistEntry =
+            remember(backStackEntry) {
+                runCatching {
+                    navController.getBackStackEntry("artist/{artistId}?isPodcastChannel={isPodcastChannel}")
+                }.getOrNull()
+            }
+        ArtistSectionScreen(
+            navController = navController,
+            sectionTitle = backStackEntry.arguments?.getString("title").orEmpty(),
+            viewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(artistEntry ?: backStackEntry),
+        )
     }
 
     composable(
