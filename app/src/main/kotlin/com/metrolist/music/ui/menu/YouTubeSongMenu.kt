@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -114,8 +115,27 @@ fun YouTubeSongMenu(
     val listenTogetherManager = LocalListenTogetherManager.current
     val isPinned by database.speedDialDao.isPinned(song.id).collectAsStateWithLifecycle(initialValue = false)
     val artistNameAliases = LocalArtistNameAliases.current
-    val artists = remember(song.artists, artistNameAliases) {
-        song.artists.mapNotNull {
+    // Search results often lack the album and/or artist ids, which hid "View artist"/"View album".
+    // Look the song up to fill them in.
+    var resolvedSong by remember(song.id) { mutableStateOf<SongItem?>(null) }
+    LaunchedEffect(song.id) {
+        if (song.album == null || song.artists.any { it.id == null }) {
+            resolvedSong =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.metrolist.innertube.YouTube
+                        .next(com.metrolist.innertube.models.WatchEndpoint(videoId = song.id))
+                        .getOrNull()
+                        ?.items
+                        ?.firstOrNull { it.id == song.id }
+                }
+        }
+    }
+    val effectiveAlbum = song.album ?: resolvedSong?.album
+    val effectiveArtists =
+        if (song.artists.isNotEmpty() && song.artists.all { it.id != null }) song.artists
+        else resolvedSong?.artists?.takeIf { it.isNotEmpty() } ?: song.artists
+    val artists = remember(effectiveArtists, artistNameAliases) {
+        effectiveArtists.mapNotNull {
             it.id?.let { artistId ->
                 MediaMetadata.Artist(
                     id = artistId,
@@ -683,7 +703,7 @@ fun YouTubeSongMenu(
 
         item {
             // Check if this is a podcast episode (album ID doesn't start with MPREb_)
-            val isPodcast = song.album?.let { !it.id.startsWith("MPREb_") } ?: false
+            val isPodcast = effectiveAlbum?.let { !it.id.startsWith("MPREb_") } ?: false
 
             Material3MenuGroup(
                 items = buildList {
@@ -716,7 +736,7 @@ fun YouTubeSongMenu(
                             )
                         )
                     }
-                    song.album?.let { album ->
+                    effectiveAlbum?.let { album ->
                         add(
                             Material3MenuItemData(
                                 title = { Text(text = stringResource(if (isPodcast) R.string.view_podcast else R.string.view_album)) },

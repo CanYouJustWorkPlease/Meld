@@ -274,6 +274,7 @@ fun SpotifyAlbumScreen(
                     thumbnailContent = {
                         ItemThumbnail(
                             thumbnailUrl = thumbnailUrl,
+                            albumIndex = index + 1,
                             isActive = isActive,
                             isPlaying = isPlaying,
                             shape = RoundedCornerShape(ThumbnailCornerRadius),

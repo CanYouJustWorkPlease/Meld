@@ -33,7 +33,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.metrolist.music.LocalPlayerAwareWindowInsets
@@ -48,14 +47,14 @@ import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.SongListItem
 import com.metrolist.music.ui.menu.SongMenu
 import com.metrolist.music.ui.utils.backToMain
-import com.metrolist.music.viewmodels.ArtistLikedSongsViewModel
+import com.metrolist.music.viewmodels.ArtistViewModel
 
 /** All songs by an artist that the user has liked. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ArtistLikedSongsScreen(
     navController: NavController,
-    viewModel: ArtistLikedSongsViewModel = hiltViewModel(),
+    viewModel: ArtistViewModel,
 ) {
     val menuState = LocalMenuState.current
     val queueAllSongsStr = stringResource(R.string.queue_all_songs)
@@ -64,8 +63,8 @@ fun ArtistLikedSongsScreen(
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
 
-    val artist by viewModel.artist.collectAsStateWithLifecycle()
-    val songs by viewModel.songs.collectAsStateWithLifecycle()
+    val songs by viewModel.likedSongs.collectAsStateWithLifecycle()
+    val artistName = viewModel.artistPage?.artist?.title.orEmpty()
     val lazyListState = rememberLazyListState()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -151,7 +150,7 @@ fun ArtistLikedSongsScreen(
         }
 
         TopAppBar(
-            title = { Text(artist?.artist?.name.orEmpty()) },
+            title = { Text(artistName) },
             navigationIcon = {
                 IconButton(
                     onClick = navController::navigateUp,
@@ -171,7 +170,7 @@ fun ArtistLikedSongsScreen(
             onClick = {
                 playerConnection.playQueue(
                     ListQueue(
-                        title = artist?.artist?.name,
+                        title = artistName,
                         items = songs.shuffled().map { it.toMediaItem() },
                     ),
                 )

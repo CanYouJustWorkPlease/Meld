@@ -189,9 +189,7 @@ fun ArtistScreen(
     val extraAlbums by viewModel.extraAlbums.collectAsStateWithLifecycle()
     val albumsTitle = stringResource(R.string.albums)
 
-    // Re-run when the page changes (cached page first, then the fresh one) so a failed or partial
-    // lookup gets another try.
-    LaunchedEffect(artistPage) {
+    LaunchedEffect(artistPage?.artist?.id) {
         if (artistPage != null) viewModel.loadExtraAlbums()
     }
 
@@ -734,7 +732,7 @@ fun ArtistScreen(
                                             "artist/${viewModel.artistId}/items?browseId=${endpoint.browseId}?params=${endpoint.params}",
                                         )
                                     }
-                                } ?: if (section.items.all { it is AlbumItem }) {
+                                } ?: if (section.items.isNotEmpty()) {
                                     {
                                         navController.navigate(
                                             "artist/${viewModel.artistId}/section?title=${Uri.encode(section.title)}",

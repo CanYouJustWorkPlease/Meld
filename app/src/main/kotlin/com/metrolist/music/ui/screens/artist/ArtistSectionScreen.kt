@@ -28,6 +28,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.metrolist.innertube.models.AlbumItem
+import com.metrolist.innertube.models.ArtistItem
+import com.metrolist.innertube.models.EpisodeItem
+import com.metrolist.innertube.models.PlaylistItem
+import com.metrolist.innertube.models.PodcastItem
+import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.models.WatchEndpoint
+import com.metrolist.music.LocalListenTogetherManager
+import com.metrolist.music.models.toMediaMetadata
+import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.ui.menu.YouTubeArtistMenu
+import com.metrolist.music.ui.menu.YouTubePlaylistMenu
+import com.metrolist.music.ui.menu.YouTubeSongMenu
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
@@ -61,6 +73,8 @@ fun ArtistSectionScreen(
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val extraAlbums by viewModel.extraAlbums.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
+    val listenTogetherManager = LocalListenTogetherManager.current
+    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
     val lazyGridState = rememberLazyGridState()
     val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
     val albumsTitle = stringResource(R.string.albums)
@@ -86,7 +100,12 @@ fun ArtistSectionScreen(
         ) { item ->
             YouTubeGridItem(
                 item = item,
-                isActive = (item as? AlbumItem)?.let { mediaMetadata?.album?.id == it.id } ?: false,
+                isActive =
+                    when (item) {
+                        is SongItem -> mediaMetadata?.id == item.id
+                        is AlbumItem -> mediaMetadata?.album?.id == item.id
+                        else -> false
+                    },
                 isPlaying = isPlaying,
                 fillMaxWidth = true,
                 coroutineScope = coroutineScope,
@@ -94,16 +113,44 @@ fun ArtistSectionScreen(
                     Modifier
                         .combinedClickable(
                             onClick = {
-                                if (item is AlbumItem) navController.navigate("album/${item.id}")
+                                when (item) {
+                                    is SongItem, is EpisodeItem -> {
+                                        if (!isGuest) {
+                                            playerConnection.playQueue(
+                                                YouTubeQueue(
+                                                    WatchEndpoint(videoId = item.id),
+                                                    (item as? SongItem)?.toMediaMetadata()
+                                                        ?: (item as EpisodeItem).toMediaMetadata(),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                    is AlbumItem -> navController.navigate("album/${item.id}")
+                                    is ArtistItem -> navController.navigate("artist/${item.id}")
+                                    is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
+                                    is PodcastItem -> navController.navigate("online_podcast/${item.id}")
+                                }
                             },
                             onLongClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                if (item is AlbumItem) {
-                                    menuState.show {
-                                        YouTubeAlbumMenu(
-                                            albumItem = item,
-                                            onDismiss = menuState::dismiss,
-                                        )
+                                menuState.show {
+                                    when (item) {
+                                        is SongItem -> YouTubeSongMenu(song = item, onDismiss = menuState::dismiss)
+                                        is AlbumItem -> YouTubeAlbumMenu(albumItem = item, onDismiss = menuState::dismiss)
+                                        is ArtistItem -> YouTubeArtistMenu(artist = item, onDismiss = menuState::dismiss)
+                                        is PlaylistItem ->
+                                            YouTubePlaylistMenu(
+                                                playlist = item,
+                                                coroutineScope = coroutineScope,
+                                                onDismiss = menuState::dismiss,
+                                            )
+                                        is PodcastItem ->
+                                            YouTubePlaylistMenu(
+                                                playlist = item.asPlaylistItem(),
+                                                coroutineScope = coroutineScope,
+                                                onDismiss = menuState::dismiss,
+                                            )
+                                        is EpisodeItem -> YouTubeSongMenu(song = item.asSongItem(), onDismiss = menuState::dismiss)
                                     }
                                 }
                             },

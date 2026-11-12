@@ -1590,10 +1590,66 @@ class MainActivity : FragmentActivity() {
         navController.navigate(targetRoute.route)
     }
 
+    /** "I used Shazam to discover Victory by Two Steps From Hell. https://..." -> "Victory Two Steps From Hell". */
+    private fun shazamQueryFromText(text: String): String? {
+        val cleaned = text.replace(Regex("https?://\\S+"), " ").replace(Regex("\\s+"), " ").trim()
+        Regex("(?i)discover\\s+(.+?)\\s+by\\s+(.+?)[.!]*$").find(cleaned)?.let {
+            return "${it.groupValues[1]} ${it.groupValues[2]}".trim()
+        }
+        return null
+    }
+
+    /** Falls back to the title of the shared Shazam page, e.g. "Victory by Two Steps From Hell | Shazam". */
+    private fun shazamQueryFromPage(text: String): String? {
+        val url = Regex("https?://\\S+").find(text)?.value ?: return null
+        return runCatching {
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0")
+            val html = connection.inputStream.bufferedReader().use { it.readText().take(200_000) }
+            val title = Regex("(?is)<title[^>]*>(.*?)</title>").find(html)?.groupValues?.get(1)
+                ?.let { android.text.Html.fromHtml(it, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }
+                ?: return@runCatching null
+            title
+                .replace(Regex("(?i)\\s*[|\\-\\u2013\\u2014]\\s*shazam.*$"), "")
+                .replace(Regex("(?i)\\s+by\\s+"), " ")
+                .replace(" - ", " ")
+                .trim()
+                .takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun openShazamShare(text: String, navController: NavHostController) {
+        val quick = shazamQueryFromText(text)
+        if (quick != null) {
+            navController.navigate(SearchRoutes.resultRoute(quick))
+            return
+        }
+        lifecycle.coroutineScope.launch(Dispatchers.IO) {
+            val query = shazamQueryFromPage(text)
+            withContext(Dispatchers.Main) {
+                if (query != null) {
+                    navController.navigate(SearchRoutes.resultRoute(query))
+                } else {
+                    Toast.makeText(this@MainActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private fun handleDeepLinkIntent(
         intent: Intent,
         navController: NavHostController,
     ) {
+        // Text shared from Shazam: open a search for the song instead of treating it as a link.
+        val sharedText = intent.extras?.getString(Intent.EXTRA_TEXT)
+        if (intent.data == null && sharedText != null && sharedText.contains("shazam", ignoreCase = true)) {
+            intent.removeExtra(Intent.EXTRA_TEXT)
+            openShazamShare(sharedText, navController)
+            return
+        }
+
         val uri = intent.data ?: intent.extras?.getString(Intent.EXTRA_TEXT)?.toUri() ?: return
         intent.data = null
         intent.removeExtra(Intent.EXTRA_TEXT)

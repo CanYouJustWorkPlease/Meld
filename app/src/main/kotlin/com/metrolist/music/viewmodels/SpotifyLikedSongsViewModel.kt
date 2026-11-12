@@ -20,16 +20,20 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
 class SpotifyLikedSongsViewModel
 @Inject
 constructor(
     @ApplicationContext private val context: Context,
     database: MusicDatabase,
+    syncUtils: com.metrolist.music.utils.SyncUtils,
 ) : ViewModel() {
     val mapper = SpotifyYouTubeMapper(database)
 
@@ -48,8 +52,27 @@ constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    private val reloadMutex = Mutex()
+
     init {
         loadLikedSongs()
+
+        // A like/unlike was just sent to Spotify (from anywhere in the app): reload quietly, with
+        // no spinner and without the list shrinking while it loads.
+        viewModelScope.launch(Dispatchers.IO) {
+            syncUtils.spotifyLikesChanged
+                .debounce(1500)
+                .collect { silentReload() }
+        }
+    }
+
+    private suspend fun silentReload() {
+        if (!reloadMutex.tryLock()) return
+        try {
+            loadLikedSongsInternal(silent = true)
+        } finally {
+            reloadMutex.unlock()
+        }
     }
 
     fun refresh() {
@@ -67,8 +90,8 @@ constructor(
         }
     }
 
-    private suspend fun loadLikedSongsInternal() {
-        _error.value = null
+    private suspend fun loadLikedSongsInternal(silent: Boolean = false) {
+        if (!silent) _error.value = null
 
         Spotify.likedSongs(limit = PAGE_SIZE, offset = 0).onSuccess { paging ->
             val firstPage = paging.items
@@ -77,12 +100,16 @@ constructor(
 
             _total.value = paging.total
 
-            // Emit first page immediately so the UI shows content within ~500ms
-            _tracks.value = firstPage
-            _isLoading.value = false
+            // Emit first page immediately so the UI shows content within ~500ms. A silent reload
+            // keeps showing the current list until everything is loaded.
+            if (!silent) {
+                _tracks.value = firstPage
+                _isLoading.value = false
+            }
 
             val remaining = paging.total - paging.items.size
             if (remaining <= 0) {
+                if (silent) _tracks.value = firstPage
                 Timber.d("SpotifyLikedSongs: Loaded ${firstPage.size} tracks (all in first page)")
                 return@onSuccess
             }
@@ -111,15 +138,18 @@ constructor(
                 }
 
                 // Emit progressively so the UI updates as pages arrive
-                _tracks.value = allTracks.toList()
+                if (!silent) _tracks.value = allTracks.toList()
 
                 if (failed) break
             }
+            if (silent) _tracks.value = allTracks.toList()
 
             Timber.d("SpotifyLikedSongs: Loaded ${allTracks.size} tracks (total=${paging.total})")
         }.onFailure { e ->
-            _error.value = e.message ?: "Failed to load liked songs"
-            _isLoading.value = false
+            if (!silent) {
+                _error.value = e.message ?: "Failed to load liked songs"
+                _isLoading.value = false
+            }
             Timber.e(e, "Failed to load Spotify liked songs")
         }
     }

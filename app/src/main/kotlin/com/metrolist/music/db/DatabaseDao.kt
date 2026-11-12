@@ -377,6 +377,10 @@ interface DatabaseDao {
     ): Flow<List<Song>>
 
     @Transaction
+    @Query("SELECT * FROM song WHERE liked = 1")
+    fun allLikedSongs(): Flow<List<Song>>
+
+    @Transaction
     @Query("SELECT * FROM song WHERE liked = 1 AND LOWER(TRIM(title)) = LOWER(TRIM(:title))")
     fun likedSongsWithTitle(title: String): Flow<List<Song>>
 

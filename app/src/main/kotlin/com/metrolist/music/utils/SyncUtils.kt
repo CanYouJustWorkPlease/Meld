@@ -300,6 +300,11 @@ class SyncUtils @Inject constructor(
     // like, so the liked-songs sync must not un-like these just because they aren't listed yet.
     private val recentLocalLikes = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
+    // Emits whenever a like/unlike was pushed to (or pulled from) Spotify, so screens listing the
+    // Spotify liked songs can refresh themselves.
+    private val _spotifyLikesChanged = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val spotifyLikesChanged: kotlinx.coroutines.flow.SharedFlow<Unit> = _spotifyLikesChanged
+
     private fun isRecentLocalLike(id: String): Boolean {
         val at = recentLocalLikes[id] ?: return false
         if (System.currentTimeMillis() - at > RECENT_LIKE_GRACE_MS) {
@@ -703,11 +708,17 @@ class SyncUtils @Inject constructor(
                 if (spotifyUri != null) {
                     if (s.liked) {
                         com.metrolist.spotify.Spotify.addToLibrary(listOf(spotifyUri))
-                            .onSuccess { Timber.d("Synced like to Spotify: $spotifyUri") }
+                            .onSuccess {
+                                Timber.d("Synced like to Spotify: $spotifyUri")
+                                _spotifyLikesChanged.tryEmit(Unit)
+                            }
                             .onFailure { e -> Timber.e(e, "Failed to sync like to Spotify: $spotifyUri") }
                     } else {
                         com.metrolist.spotify.Spotify.removeFromLibrary(listOf(spotifyUri))
-                            .onSuccess { Timber.d("Synced unlike to Spotify: $spotifyUri") }
+                            .onSuccess {
+                                Timber.d("Synced unlike to Spotify: $spotifyUri")
+                                _spotifyLikesChanged.tryEmit(Unit)
+                            }
                             .onFailure { e -> Timber.e(e, "Failed to sync unlike to Spotify: $spotifyUri") }
                     }
                 } else {

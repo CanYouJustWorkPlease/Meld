@@ -147,6 +147,11 @@ fun SpotifyLikedSongsScreen(
     }
 
     val sortedTracks = remember(tracks, sortType, sortDescending) {
+        // ORIGINAL is the order Spotify returns: most recently liked first ("Date added"), so
+        // descending = newest to oldest.
+        if (sortType == SpotifySortType.ORIGINAL) {
+            return@remember if (sortDescending) tracks else tracks.reversed()
+        }
         val sorted = when (sortType) {
             SpotifySortType.ORIGINAL -> tracks
             SpotifySortType.NAME -> tracks.sortedBy { it.name.lowercase() }
@@ -258,7 +263,7 @@ fun SpotifyLikedSongsScreen(
                             onSortDescendingChange = onSortDescendingChange,
                             sortTypeText = { type ->
                                 when (type) {
-                                    SpotifySortType.ORIGINAL -> R.string.sort_by_original
+                                    SpotifySortType.ORIGINAL -> R.string.sort_by_create_date
                                     SpotifySortType.NAME -> R.string.sort_by_name
                                     SpotifySortType.ARTIST -> R.string.sort_by_artist
                                     SpotifySortType.DURATION -> R.string.sort_by_duration

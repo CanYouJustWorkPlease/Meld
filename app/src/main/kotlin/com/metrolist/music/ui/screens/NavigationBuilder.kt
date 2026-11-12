@@ -249,8 +249,19 @@ fun NavGraphBuilder.navigationBuilder(
                     type = NavType.StringType
                 },
             ),
-    ) {
-        ArtistLikedSongsScreen(navController)
+    ) { backStackEntry ->
+        // Share the artist page's view model: it knows the page's songs, which decides which liked
+        // songs count as this artist's.
+        val artistEntry =
+            remember(backStackEntry) {
+                runCatching {
+                    navController.getBackStackEntry("artist/{artistId}?isPodcastChannel={isPodcastChannel}")
+                }.getOrNull()
+            }
+        ArtistLikedSongsScreen(
+            navController = navController,
+            viewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(artistEntry ?: backStackEntry),
+        )
     }
 
     composable(

@@ -5,6 +5,10 @@
 
 package com.metrolist.music.viewmodels
 
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.combine
+import com.metrolist.music.utils.SameTrack
+import androidx.compose.runtime.snapshotFlow
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,63 +102,58 @@ class ArtistViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Songs by this artist that the user liked (matched by id or, for artists saved under another
-    // id, by name).
-    val likedSongs = libraryArtist
-        .map { it?.artist?.name.orEmpty() }
-        .distinctUntilChanged()
-        .flatMapLatest { name -> database.likedSongsByArtist(artistId, name) }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    // Songs by this artist that the user liked. A collaboration is published once per artist on
+    // YouTube Music, so a liked copy under another artist counts too when it is the same track as
+    // one of the songs on this artist's page (same title, length and credited artists).
+    val likedSongs =
+        combine(
+            database.allLikedSongs(),
+            snapshotFlow { artistPage },
+            libraryArtist.map { it?.artist?.name.orEmpty() }.distinctUntilChanged(),
+        ) { liked, page, libraryName ->
+            val names =
+                setOf(libraryName, page?.artist?.title.orEmpty())
+                    .filter { it.isNotBlank() }
+                    .map { it.lowercase() }
+                    .toSet()
+            val ids = setOfNotNull(artistId, page?.artist?.id)
+            val pageSongs =
+                page?.sections?.flatMap { it.items }?.filterIsInstance<SongItem>().orEmpty()
+            SameTrack.dedupe(
+                liked.filter { song ->
+                    song.artists.any { it.id in ids || it.name.lowercase() in names } ||
+                        pageSongs.any { SameTrack.matches(it, song) }
+                },
+            )
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // Extra albums found by searching YouTube Music for the artist. The artist page only lists the
     // main version of an album, so deluxe/re-release versions are missing from it.
     private val _extraAlbums = MutableStateFlow<List<AlbumItem>>(emptyList())
     val extraAlbums = _extraAlbums.asStateFlow()
-    private var extraAlbumsJob: kotlinx.coroutines.Job? = null
+    private var extraAlbumsLoaded = false
 
-    /**
-     * Looks up the artist's albums via search. Safe to call repeatedly (e.g. when the page is
-     * refreshed): it reuses a cached result, retries when searches fail, and only runs one lookup
-     * at a time.
-     */
     fun loadExtraAlbums() {
+        if (extraAlbumsLoaded) return
         val page = artistPage ?: return
+        extraAlbumsLoaded = true
         val name = page.artist.title
         val ytId = page.artist.id
-        val key = ytId.ifBlank { name.lowercase() }
-
-        extraAlbumsCache[key]?.let {
-            if (_extraAlbums.value != it) _extraAlbums.value = it
-            return
-        }
-        if (extraAlbumsJob?.isActive == true) return
-
-        extraAlbumsJob = viewModelScope.launch {
+        viewModelScope.launch {
             val found = mutableListOf<AlbumItem>()
-            var succeeded = 0
-            for (query in listOf(name, "$name deluxe", "$name album")) {
-                var ok = false
-                repeat(3) { attempt ->
-                    if (ok) return@repeat
-                    YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM)
-                        .onSuccess { result ->
-                            ok = true
-                            result.items.filterIsInstance<AlbumItem>().forEach { album ->
-                                val byArtist = album.artists?.any {
-                                    it.id == ytId || it.name.equals(name, ignoreCase = true)
-                                } == true
-                                if (byArtist) found += album
-                            }
-                        }
-                        .onFailure { reportException(it) }
-                    if (!ok) kotlinx.coroutines.delay(1000L * (attempt + 1))
+            for (query in listOf(name, "$name deluxe")) {
+                YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM).onSuccess { result ->
+                    result.items.filterIsInstance<AlbumItem>().forEach { album ->
+                        val byArtist = album.artists?.any {
+                            it.id == ytId || it.name.equals(name, ignoreCase = true)
+                        } == true
+                        if (byArtist) found += album
+                    }
                 }
-                if (ok) succeeded++
             }
-            val albums = found.distinctBy { it.id }
-            if (albums.isNotEmpty()) _extraAlbums.value = albums
-            // Only remember a result when every search worked, so a partial/failed lookup is retried.
-            if (succeeded == 3) extraAlbumsCache[key] = albums
+            val known = page.sections.flatMap { it.items }.map { it.id }.toSet()
+            _extraAlbums.value = found.distinctBy { it.id }.filter { it.id !in known }
         }
     }
 
@@ -419,5 +418,3 @@ class ArtistViewModel @Inject constructor(
         }
     }
 }
-
-private val extraAlbumsCache = java.util.concurrent.ConcurrentHashMap<String, List<AlbumItem>>()
