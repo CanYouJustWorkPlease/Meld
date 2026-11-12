@@ -309,11 +309,41 @@ class SyncUtils @Inject constructor(
         return true
     }
 
+    /** Unlikes other liked entries that are the same track as the given one (see [SameTrack]). */
+    fun unlikeEquivalents(title: String, durationSec: Int, artistNames: List<String>, excludeId: String) {
+        if (artistNames.isEmpty()) return
+        syncScope.launch {
+            try {
+                database.likedSongsWithTitle(title).first()
+                    .filter {
+                        it.song.id != excludeId &&
+                            SameTrack.matches(
+                                title, durationSec, artistNames,
+                                it.song.title, it.song.duration, it.artists.map { a -> a.name },
+                            )
+                    }
+                    .forEach { other ->
+                        val updated = other.song.toggleLike()
+                        database.query { update(updated) }
+                        likeSong(updated)
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to unlike equivalent songs")
+            }
+        }
+    }
+
     fun likeSong(s: SongEntity) {
         if (s.liked) {
             recentLocalLikes[s.id] = System.currentTimeMillis()
         } else {
             recentLocalLikes.remove(s.id)
+            syncScope.launch {
+                val names = database.song(s.id).firstOrNull()?.artists?.map { it.name }.orEmpty()
+                unlikeEquivalents(s.title, s.duration, names, s.id)
+            }
         }
         syncScope.launch {
             syncChannel.send(SyncOperation.LikeSong(s))
@@ -669,7 +699,7 @@ class SyncUtils @Inject constructor(
                 val dbSong = database.song(s.id).firstOrNull()
                 val artist = dbSong?.artists?.firstOrNull()?.name ?: ""
                 val durationSec = s.duration
-                val spotifyUri = spotifyMapper.resolveToSpotifyUri(s.id, s.title, artist, durationSec)
+                val spotifyUri = spotifyMapper.resolveToSpotifyUri(s.id, s.title, artist, durationSec, s.albumName)
                 if (spotifyUri != null) {
                     if (s.liked) {
                         com.metrolist.spotify.Spotify.addToLibrary(listOf(spotifyUri))
