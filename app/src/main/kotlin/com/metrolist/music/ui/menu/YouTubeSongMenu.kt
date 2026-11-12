@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -83,6 +84,7 @@ import com.metrolist.music.ui.component.NewActionGrid
 import com.metrolist.music.ui.utils.ShowMediaInfo
 import com.metrolist.music.ui.utils.resize
 import com.metrolist.music.utils.ArtistNameAliases
+import com.metrolist.music.utils.SameTrack
 import com.metrolist.music.utils.joinByBullet
 import com.metrolist.music.utils.makeTimeString
 import kotlinx.coroutines.Dispatchers
@@ -239,7 +241,12 @@ fun YouTubeSongMenu(
         trailingContent = {
             // For episodes, show saved state and toggle save for later
             val isEpisode = song.isEpisode
-            val isFavorite = if (isEpisode) librarySong?.song?.inLibrary != null else librarySong?.song?.liked == true
+            val equivalentLiked by produceState(false, song.id) {
+                database.likedSongsWithTitle(song.title).collect { list ->
+                    value = list.any { it.song.id != song.id && SameTrack.matches(song, it) }
+                }
+            }
+            val isFavorite = if (isEpisode) librarySong?.song?.inLibrary != null else (librarySong?.song?.liked == true || equivalentLiked)
             IconButton(
                 onClick = {
                     if (isEpisode) {
@@ -264,6 +271,10 @@ fun YouTubeSongMenu(
                         }
                     } else {
                         // Regular song: toggle like
+                        if (equivalentLiked && librarySong?.song?.liked != true) {
+                            // Shown as liked because the same track is liked under another id: unlike that.
+                            syncUtils.unlikeEquivalents(song.title, song.duration ?: -1, song.artists.map { it.name }, song.id)
+                        } else
                         database.transaction {
                             librarySong.let { librarySong ->
                                 val s: SongEntity
