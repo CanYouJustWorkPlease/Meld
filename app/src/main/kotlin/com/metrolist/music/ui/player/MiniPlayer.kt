@@ -631,8 +631,27 @@ private fun NewMiniPlayerPlayButton(
 /**
  * Song info display - title and artist
  */
+/**
+ * The mini player has a fixed height, so large system font sizes (common on small, high-density
+ * screens) pushed the artist line out of view. Cap the font scale inside it.
+ */
 @Composable
 private fun NewMiniPlayerSongInfo(
+    mediaMetadata: MediaMetadata?,
+    onSurfaceColor: Color,
+    errorColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale.coerceAtMost(1.1f)),
+    ) {
+        NewMiniPlayerSongInfoContent(mediaMetadata, onSurfaceColor, errorColor, modifier)
+    }
+}
+
+@Composable
+private fun NewMiniPlayerSongInfoContent(
     mediaMetadata: MediaMetadata?,
     onSurfaceColor: Color,
     errorColor: Color,
@@ -649,6 +668,7 @@ private fun NewMiniPlayerSongInfo(
                 text = metadata.title,
                 color = onSurfaceColor,
                 fontSize = 14.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
@@ -664,6 +684,7 @@ private fun NewMiniPlayerSongInfo(
                          text = metadata.artists.joinToArtistString(" ${stringResource(R.string.and)} ") { it.name },
                          color = onSurfaceColor.copy(alpha = 0.7f),
                         fontSize = 12.sp,
+                        lineHeight = 15.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Clip,
                         modifier = Modifier.basicMarquee(iterations = 1, initialDelayMillis = 3000, velocity = 30.dp),
@@ -950,6 +971,20 @@ private fun LegacyMiniMediaInfo(
     pureBlack: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale.coerceAtMost(1.1f)),
+    ) {
+        LegacyMiniMediaInfoContent(mediaMetadata, pureBlack, modifier)
+    }
+}
+
+@Composable
+private fun LegacyMiniMediaInfoContent(
+    mediaMetadata: MediaMetadata,
+    pureBlack: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val error by LocalPlayerConnection.current?.error?.collectAsState() ?: remember { mutableStateOf(null) }
     val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
 
@@ -1014,6 +1049,7 @@ private fun LegacyMiniMediaInfo(
                 text = mediaMetadata.title,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 16.sp,
+                lineHeight = 20.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1025,6 +1061,7 @@ private fun LegacyMiniMediaInfo(
                      text = mediaMetadata.artists.joinToArtistString(" ${stringResource(R.string.and)} ") { it.name },
                      color = MaterialTheme.colorScheme.secondary,
                     fontSize = 12.sp,
+                    lineHeight = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
