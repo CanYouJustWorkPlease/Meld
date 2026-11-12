@@ -65,6 +65,8 @@ constructor(
                 when (playlist) {
                     "liked" -> database.likedSongs(sortType, descending)
                         .map { it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs) }
+                        // The same track under several ids (collaborations) is shown once.
+                        .map { com.metrolist.music.utils.SameTrack.dedupe(it) }
 
                     "downloaded" -> database.downloadedSongs(sortType, descending)
                         .map { it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs) }
