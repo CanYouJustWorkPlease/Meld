@@ -120,6 +120,7 @@ import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.playback.queues.LocalAlbumRadio
 import com.metrolist.music.ui.utils.resize
+import com.metrolist.music.utils.SameTrack
 import com.metrolist.music.utils.joinByBullet
 import com.metrolist.music.utils.joinToArtistString
 import com.metrolist.music.utils.makeTimeString
@@ -1146,7 +1147,16 @@ fun YouTubeListItem(
             if (item is AlbumItem) database.album(item.id).collect { value = it }
         }
 
-        if ((item is SongItem && song?.song?.liked == true) ||
+        // Same track published under another id/artist (collaborations) counts as liked too.
+        val equivalentLiked by produceState(false, item.id) {
+            if (item is SongItem) {
+                database.likedSongsWithTitle(item.title).collect { list ->
+                    value = list.any { it.song.id != item.id && SameTrack.matches(item, it) }
+                }
+            }
+        }
+
+        if ((item is SongItem && (song?.song?.liked == true || equivalentLiked)) ||
             (item is AlbumItem && album?.album?.bookmarkedAt != null)
         ) {
             Icon.Favorite()
@@ -1247,13 +1257,20 @@ fun YouTubeGridItem(
     badges: @Composable RowScope.() -> Unit = {
         val database = LocalDatabase.current
         val song by produceState<Song?>(initialValue = null, item.id) {
-            if (item is SongItem) value = database.song(item.id).firstOrNull()
+            if (item is SongItem) database.song(item.id).collect { value = it }
         }
         val album by produceState<Album?>(initialValue = null, item.id) {
-            if (item is AlbumItem) value = database.album(item.id).firstOrNull()
+            if (item is AlbumItem) database.album(item.id).collect { value = it }
+        }
+        val equivalentLiked by produceState(false, item.id) {
+            if (item is SongItem) {
+                database.likedSongsWithTitle(item.title).collect { list ->
+                    value = list.any { it.song.id != item.id && SameTrack.matches(item, it) }
+                }
+            }
         }
 
-        if (item is SongItem && song?.song?.liked == true ||
+        if (item is SongItem && (song?.song?.liked == true || equivalentLiked) ||
             item is AlbumItem && album?.album?.bookmarkedAt != null
         ) {
             Icon.Favorite()
