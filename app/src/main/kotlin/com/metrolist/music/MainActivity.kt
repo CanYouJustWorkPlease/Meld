@@ -1600,6 +1600,8 @@ class MainActivity : FragmentActivity() {
         // for it as it is, minus the link and the word "Shazam".
         return cleaned
             .replace(Regex("(?i)shazam\\w*"), " ")
+            .replace(Regex("(?i)\\b(i used|used|to discover|discover)\\b"), " ")
+            .replace(Regex("(?i)\\s+by\\s+"), " ")
             .replace(Regex("\\s+"), " ")
             .trim(' ', '.', '!', ',', ':', '-')
             .takeIf { it.length >= 3 }

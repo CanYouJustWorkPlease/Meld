@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -93,6 +94,9 @@ fun YTItemsGridScreen(
                 false -> distinct.sortedByDescending { (it as? AlbumItem)?.year ?: -1 }
             }
         }
+
+    // Re-sorting moves the item the scroll position is anchored to; start from the top instead.
+    LaunchedEffect(yearAscending) { lazyGridState.scrollToItem(0) }
 
     LazyVerticalGrid(
         state = lazyGridState,

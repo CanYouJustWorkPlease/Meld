@@ -5,6 +5,7 @@
 
 package com.metrolist.music.viewmodels
 
+import kotlinx.coroutines.flow.drop
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -1018,6 +1019,25 @@ class HomeViewModel @Inject constructor(
                         accountImageUrl.value = null
                         accountPlaylists.value = null
                     }
+                }
+        }
+
+        // Refresh the home page right after logging in or out (YouTube or Spotify), so it shows the
+        // account's content without a manual pull-to-refresh.
+        viewModelScope.launch(Dispatchers.IO) {
+            context.dataStore.data
+                .map {
+                    Triple(
+                        !it[InnerTubeCookieKey].isNullOrEmpty(),
+                        !it[SpotifyAccessTokenKey].isNullOrEmpty(),
+                        it[EnableSpotifyKey] ?: false,
+                    )
+                }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    kotlinx.coroutines.delay(600)
+                    refresh()
                 }
         }
 

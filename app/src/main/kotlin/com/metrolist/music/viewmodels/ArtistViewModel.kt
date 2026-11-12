@@ -119,10 +119,21 @@ class ArtistViewModel @Inject constructor(
             val ids = setOfNotNull(artistId, page?.artist?.id)
             val pageSongs =
                 page?.sections?.flatMap { it.items }?.filterIsInstance<SongItem>().orEmpty()
+            // Albums by this artist: every liked song on one of them counts, whoever is credited
+            // on the individual track (e.g. a collaborator).
+            val ownAlbums =
+                page?.sections?.flatMap { it.items }?.filterIsInstance<AlbumItem>()
+                    ?.filter { album ->
+                        album.artists?.any { it.id in ids || it.name.lowercase() in names } == true
+                    }.orEmpty()
+            val ownAlbumIds = ownAlbums.map { it.id }.toSet()
+            val ownAlbumNames = ownAlbums.map { SameTrack.norm(it.title) }.filter { it.isNotEmpty() }.toSet()
             SameTrack.dedupe(
                 liked.filter { song ->
                     song.artists.any { it.id in ids || it.name.lowercase() in names } ||
-                        pageSongs.any { SameTrack.matches(it, song) }
+                        pageSongs.any { SameTrack.matches(it, song) } ||
+                        song.song.albumId in ownAlbumIds ||
+                        SameTrack.norm(song.song.albumName.orEmpty()).let { it.isNotEmpty() && it in ownAlbumNames }
                 },
             )
         }.flowOn(Dispatchers.Default)
@@ -178,9 +189,11 @@ class ArtistViewModel @Inject constructor(
                     }
             }
         } else {
-            // Non-YouTube artist (Spotify/local): wait for DB, then search YouTube by name
+            // Non-YouTube artist (Spotify/local): search YouTube by name. An artist that isn't in
+            // the library (e.g. from a Spotify search result) never appears in the DB, so don't
+            // wait for it forever.
             viewModelScope.launch {
-                libraryArtist.first { it != null }
+                kotlinx.coroutines.withTimeoutOrNull(1500) { libraryArtist.first { it != null } }
                 resolveAndFetchByName()
             }
         }
@@ -202,8 +215,12 @@ class ArtistViewModel @Inject constructor(
 
     private fun resolveAndFetchByName() {
         viewModelScope.launch {
-            val artist = libraryArtist.value?.artist
-            val name = artist?.name ?: return@launch
+            val name =
+                libraryArtist.value?.artist?.name
+                    ?: artistId.takeIf { it.startsWith("spotify:") }?.let { id ->
+                        com.metrolist.spotify.Spotify.artist(id.removePrefix("spotify:")).getOrNull()?.name
+                    }
+                    ?: return@launch
 
             YouTube.search(name, YouTube.SearchFilter.FILTER_ARTIST)
                 .onSuccess { result ->

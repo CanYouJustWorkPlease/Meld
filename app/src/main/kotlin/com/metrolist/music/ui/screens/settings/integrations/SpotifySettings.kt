@@ -253,30 +253,47 @@ fun SpotifySettings(
             )
         }
 
-        PreferenceEntry(
-            title = {
+        // On narrow screens the long button label squeezed the title away, so the button goes on its
+        // own line below there; on wider screens it sits on the right like the first method.
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            val stacked = maxWidth < 480.dp
+            val cookieTitle: @Composable (Modifier) -> Unit = { m ->
                 Text(
                     text = if (cookieLoggedIn) spotifyUsername else stringResource(R.string.spotify_not_logged_in),
-                    modifier = Modifier.alpha(if (cookieLoggedIn) 1f else 0.5f),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = m.alpha(if (cookieLoggedIn) 1f else 0.5f),
                 )
-            },
-            description = null,
-            icon = { Icon(painterResource(R.drawable.spotify), null) },
-            trailingContent = {
+            }
+            val cookieButton: @Composable (Modifier) -> Unit = { m ->
                 if (cookieLoggedIn) {
-                    OutlinedButton(onClick = doLogout) {
+                    OutlinedButton(onClick = doLogout, modifier = m) {
                         Text(stringResource(R.string.action_logout))
                     }
                 } else {
                     OutlinedButton(
                         onClick = { showCookieDialog = true },
                         enabled = !browserLoggedIn,
+                        modifier = m,
                     ) {
-                        Text("Log in using sp_dc cookie")
+                        Text("Log in using sp_dc cookie", maxLines = 2)
                     }
                 }
-            },
-        )
+            }
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(R.drawable.spotify), null)
+                    Spacer(Modifier.size(16.dp))
+                    cookieTitle(Modifier.weight(1f))
+                    if (!stacked || cookieLoggedIn) cookieButton(Modifier)
+                }
+                if (stacked && !cookieLoggedIn) {
+                    Spacer(Modifier.size(8.dp))
+                    cookieButton(Modifier.fillMaxWidth())
+                }
+            }
+        }
 
         Text(
             text =

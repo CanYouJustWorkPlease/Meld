@@ -490,8 +490,18 @@ fun SongListItem(
     showDownloadIcon: Boolean = true,
     subtitleOverride: String? = null,
     badges: @Composable RowScope.() -> Unit = {
-        if (showLikedIcon && song.song.liked) {
-            Icon.Favorite()
+        if (showLikedIcon) {
+            // The same track liked under another id (collaborations) counts as liked too.
+            val database = LocalDatabase.current
+            val equivalentLiked by produceState(false, song.id, song.song.liked) {
+                value = false
+                if (!song.song.liked) {
+                    database.likedSongsWithTitle(song.song.title).collect { list ->
+                        value = list.any { it.song.id != song.song.id && SameTrack.matches(song, it) }
+                    }
+                }
+            }
+            if (song.song.liked || equivalentLiked) Icon.Favorite()
         }
         if (song.song.explicit) {
             Icon.Explicit()

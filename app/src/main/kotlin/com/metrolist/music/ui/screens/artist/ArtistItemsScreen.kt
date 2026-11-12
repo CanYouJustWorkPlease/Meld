@@ -95,6 +95,16 @@ fun ArtistItemsScreen(
     }
     val itemsPage by viewModel.itemsPage.collectAsStateWithLifecycle()
 
+    // Album/single lists are short: load every page up front so the grid (and its sorting) is
+    // complete without having to scroll to the end first.
+    LaunchedEffect(itemsPage?.continuation) {
+        if (itemsPage?.continuation != null && itemsPage?.items?.firstOrNull() !is SongItem) {
+            viewModel.loadMore()
+        }
+    }
+    // Re-sorting moves the item the scroll position is anchored to; start from the top instead.
+    LaunchedEffect(yearAscending) { lazyGridState.scrollToItem(0) }
+
     LaunchedEffect(lazyListState) {
         snapshotFlow {
             lazyListState.layoutInfo.visibleItemsInfo.any { it.key == "loading" }
