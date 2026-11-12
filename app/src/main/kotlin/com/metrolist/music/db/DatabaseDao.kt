@@ -376,6 +376,10 @@ interface DatabaseDao {
         artistName: String,
     ): Flow<List<Song>>
 
+    @Transaction
+    @Query("SELECT * FROM song WHERE liked = 1 AND LOWER(TRIM(title)) = LOWER(TRIM(:title))")
+    fun likedSongsWithTitle(title: String): Flow<List<Song>>
+
     @Query("SELECT albumName FROM song WHERE albumId = :albumId AND albumName IS NOT NULL LIMIT 1")
     suspend fun albumNameFromSongs(albumId: String): String?
 
