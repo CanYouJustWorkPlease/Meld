@@ -274,6 +274,7 @@ class SpotifyYouTubeMapper(
         title: String,
         artist: String,
         durationSec: Int = -1,
+        album: String? = null,
     ): String? = withContext(Dispatchers.IO) {
         database.getSpotifyMatchByYouTubeId(youtubeId)?.let { cached ->
             Timber.d("Reverse lookup cache hit: $youtubeId -> spotify:track:${cached.spotifyId}")
@@ -300,12 +301,25 @@ class SpotifyYouTubeMapper(
         var best: SpotifyTrack? = null
         var bestScore = 0.0
         for (candidate in results) {
-            val score = SpotifyMapper.matchScorePrecomputed(
-                precomputed = ytPrecomputed,
-                candidateTitle = candidate.name,
-                candidateArtist = candidate.artists.firstOrNull()?.name ?: "",
-                candidateDurationSec = candidate.durationMs / 1000,
-            )
+            // A collaboration lists several artists on Spotify; the YouTube song may be filed under
+            // any one of them, so score against each artist (and all of them) and keep the best.
+            val names = candidate.artists.map { it.name }
+            val artistVariants = (names + names.joinToString(" ")).filter { it.isNotBlank() }.ifEmpty { listOf("") }
+            var score = artistVariants.maxOf { candidateArtist ->
+                SpotifyMapper.matchScorePrecomputed(
+                    precomputed = ytPrecomputed,
+                    candidateTitle = candidate.name,
+                    candidateArtist = candidateArtist,
+                    candidateDurationSec = candidate.durationMs / 1000,
+                )
+            }
+            // Same title/artist can exist as several recordings: the album tells them apart.
+            if (!album.isNullOrBlank() &&
+                com.metrolist.music.utils.SameTrack.norm(album) ==
+                com.metrolist.music.utils.SameTrack.norm(candidate.album?.name.orEmpty())
+            ) {
+                score += 0.15
+            }
             if (score > bestScore) {
                 best = candidate
                 bestScore = score
