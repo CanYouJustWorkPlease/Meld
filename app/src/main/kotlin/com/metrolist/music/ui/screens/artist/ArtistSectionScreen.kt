@@ -5,78 +5,27 @@
 
 package com.metrolist.music.ui.screens.artist
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.metrolist.innertube.models.AlbumItem
-import com.metrolist.innertube.models.ArtistItem
-import com.metrolist.innertube.models.EpisodeItem
-import com.metrolist.innertube.models.PlaylistItem
-import com.metrolist.innertube.models.PodcastItem
-import com.metrolist.innertube.models.SongItem
-import com.metrolist.innertube.models.WatchEndpoint
-import com.metrolist.music.LocalListenTogetherManager
-import com.metrolist.music.models.toMediaMetadata
-import com.metrolist.music.playback.queues.YouTubeQueue
-import com.metrolist.music.ui.menu.YouTubeArtistMenu
-import com.metrolist.music.ui.menu.YouTubePlaylistMenu
-import com.metrolist.music.ui.menu.YouTubeSongMenu
-import com.metrolist.music.LocalPlayerAwareWindowInsets
-import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
-import com.metrolist.music.constants.GridItemSize
-import com.metrolist.music.constants.GridItemsSizeKey
-import com.metrolist.music.constants.GridThumbnailHeight
-import com.metrolist.music.ui.component.IconButton
-import com.metrolist.music.ui.component.LocalMenuState
-import com.metrolist.music.ui.component.YouTubeGridItem
-import com.metrolist.music.ui.menu.YouTubeAlbumMenu
-import com.metrolist.music.ui.utils.backToMain
-import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.viewmodels.ArtistViewModel
 
 /**
- * Grid with every item of one section of the artist page (used for "Albums", which YouTube Music
- * doesn't give a "more" page for). [viewModel] is the artist page's view model, so the data is
- * already loaded.
+ * Grid with every item of one section of the artist page (used for sections that YouTube Music
+ * gives no "more" page for). [viewModel] is the artist page's view model, so the data is already
+ * loaded.
  */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ArtistSectionScreen(
     navController: NavController,
     sectionTitle: String,
     viewModel: ArtistViewModel,
 ) {
-    val menuState = LocalMenuState.current
-    val haptic = LocalHapticFeedback.current
-    val playerConnection = LocalPlayerConnection.current ?: return
-    val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val extraAlbums by viewModel.extraAlbums.collectAsStateWithLifecycle()
-    val coroutineScope = rememberCoroutineScope()
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val isGuest = listenTogetherManager?.isInRoom == true && !listenTogetherManager.isHost
-    val lazyGridState = rememberLazyGridState()
-    val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
     val albumsTitle = stringResource(R.string.albums)
 
     val sectionItems = viewModel.artistPage?.sections?.firstOrNull { it.title == sectionTitle }?.items.orEmpty()
@@ -86,91 +35,8 @@ fun ArtistSectionScreen(
                 .distinctBy { it.id }
                 .sortedByDescending { (it as? AlbumItem)?.year ?: 0 }
         } else {
-            sectionItems.distinctBy { it.id }
+            sectionItems
         }
 
-    LazyVerticalGrid(
-        state = lazyGridState,
-        columns = GridCells.Adaptive(minSize = GridThumbnailHeight + if (gridItemSize == GridItemSize.BIG) 24.dp else (-24).dp),
-        contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
-    ) {
-        items(
-            items = items,
-            key = { "artist_section_${it.id}" },
-        ) { item ->
-            YouTubeGridItem(
-                item = item,
-                isActive =
-                    when (item) {
-                        is SongItem -> mediaMetadata?.id == item.id
-                        is AlbumItem -> mediaMetadata?.album?.id == item.id
-                        else -> false
-                    },
-                isPlaying = isPlaying,
-                fillMaxWidth = true,
-                coroutineScope = coroutineScope,
-                modifier =
-                    Modifier
-                        .combinedClickable(
-                            onClick = {
-                                when (item) {
-                                    is SongItem, is EpisodeItem -> {
-                                        if (!isGuest) {
-                                            playerConnection.playQueue(
-                                                YouTubeQueue(
-                                                    WatchEndpoint(videoId = item.id),
-                                                    (item as? SongItem)?.toMediaMetadata()
-                                                        ?: (item as EpisodeItem).toMediaMetadata(),
-                                                ),
-                                            )
-                                        }
-                                    }
-                                    is AlbumItem -> navController.navigate("album/${item.id}")
-                                    is ArtistItem -> navController.navigate("artist/${item.id}")
-                                    is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
-                                    is PodcastItem -> navController.navigate("online_podcast/${item.id}")
-                                }
-                            },
-                            onLongClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                menuState.show {
-                                    when (item) {
-                                        is SongItem -> YouTubeSongMenu(song = item, onDismiss = menuState::dismiss)
-                                        is AlbumItem -> YouTubeAlbumMenu(albumItem = item, onDismiss = menuState::dismiss)
-                                        is ArtistItem -> YouTubeArtistMenu(artist = item, onDismiss = menuState::dismiss)
-                                        is PlaylistItem ->
-                                            YouTubePlaylistMenu(
-                                                playlist = item,
-                                                coroutineScope = coroutineScope,
-                                                onDismiss = menuState::dismiss,
-                                            )
-                                        is PodcastItem ->
-                                            YouTubePlaylistMenu(
-                                                playlist = item.asPlaylistItem(),
-                                                coroutineScope = coroutineScope,
-                                                onDismiss = menuState::dismiss,
-                                            )
-                                        is EpisodeItem -> YouTubeSongMenu(song = item.asSongItem(), onDismiss = menuState::dismiss)
-                                    }
-                                }
-                            },
-                        ).animateItem(),
-            )
-        }
-    }
-
-    TopAppBar(
-        title = { Text(sectionTitle) },
-        navigationIcon = {
-            IconButton(
-                onClick = navController::navigateUp,
-                onLongClick = navController::backToMain,
-            ) {
-                Icon(
-                    painterResource(R.drawable.arrow_back),
-                    contentDescription = null,
-                )
-            }
-        },
-    )
+    YTItemsGridScreen(navController = navController, title = sectionTitle, sourceItems = items)
 }

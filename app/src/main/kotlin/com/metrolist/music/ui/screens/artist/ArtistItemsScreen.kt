@@ -5,6 +5,8 @@
 
 package com.metrolist.music.ui.screens.artist
 
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -83,6 +85,14 @@ fun ArtistItemsScreen(
     val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
 
     val title by viewModel.title.collectAsStateWithLifecycle()
+    var yearAscending by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<Boolean?>(null) }
+    val applyYearSort: (List<com.metrolist.innertube.models.YTItem>) -> List<com.metrolist.innertube.models.YTItem> = { list ->
+        when (yearAscending) {
+            null -> list
+            true -> list.sortedBy { (it as? AlbumItem)?.year ?: Int.MAX_VALUE }
+            false -> list.sortedByDescending { (it as? AlbumItem)?.year ?: -1 }
+        }
+    }
     val itemsPage by viewModel.itemsPage.collectAsStateWithLifecycle()
 
     LaunchedEffect(lazyListState) {
@@ -256,7 +266,7 @@ fun ArtistItemsScreen(
             contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
         ) {
             items(
-                items = itemsPage?.items.orEmpty().distinctBy { it.id },
+                items = applyYearSort(itemsPage?.items.orEmpty().distinctBy { it.id }),
                 key = { "artist_items_grid_${it.id}" },
             ) { item ->
                 YouTubeGridItem(
@@ -376,6 +386,20 @@ fun ArtistItemsScreen(
 
     TopAppBar(
         title = { Text(title) },
+        actions = {
+            if (itemsPage?.items?.any { it is AlbumItem } == true) {
+                androidx.compose.material3.TextButton(
+                    onClick = { yearAscending = if (yearAscending == true) false else true },
+                ) {
+                    Text(androidx.compose.ui.res.stringResource(R.string.sort_by_year))
+                    Icon(
+                        painter = painterResource(if (yearAscending == true) R.drawable.arrow_upward else R.drawable.arrow_downward),
+                        contentDescription = null,
+                        modifier = androidx.compose.ui.Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+        },
         navigationIcon = {
             IconButton(
                 onClick = navController::navigateUp,

@@ -1387,6 +1387,12 @@ fun HomeScreen(
                                         sectionData.endpoint?.let { endpoint ->
                                             {
                                                 when {
+                                                    // The "New releases" page is not personalised, so it listed
+                                                    // different items than this section: show this section's own.
+                                                    endpoint.browseId.startsWith("FEmusic_new_releases") -> {
+                                                        navController.navigate("home_section?title=${android.net.Uri.encode(sectionData.title)}")
+                                                    }
+
                                                     endpoint.browseId == "FEmusic_moods_and_genres" -> {
                                                         navController.navigate("mood_and_genres")
                                                     }
@@ -2345,6 +2351,10 @@ fun HomeScreen(
                                             sectionData.endpoint?.let { endpoint ->
                                                 {
                                                     when {
+                                                        endpoint.browseId.startsWith("FEmusic_new_releases") -> {
+                                                            navController.navigate("home_section?title=${android.net.Uri.encode(sectionData.title)}")
+                                                        }
+
                                                         endpoint.browseId == "FEmusic_moods_and_genres" -> {
                                                             navController.navigate("mood_and_genres")
                                                         }

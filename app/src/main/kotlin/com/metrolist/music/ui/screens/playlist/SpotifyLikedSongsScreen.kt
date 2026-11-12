@@ -370,6 +370,8 @@ fun SpotifyLikedSongsScreen(
                                         mapper = mapper,
                                         onDismiss = menuState::dismiss,
                                         navController = navController,
+                                        isLiked = true,
+                                        onLikeChanged = { nowLiked -> viewModel.onLikeChanged(track.id, nowLiked) },
                                     )
                                 }
                             },

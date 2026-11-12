@@ -38,22 +38,30 @@ object SameTrack {
         titleB: String,
         durationB: Int,
         artistsB: Collection<String>,
+        albumA: String? = null,
+        albumB: String? = null,
     ): Boolean {
         if (norm(titleA) != norm(titleB)) return false
         if (durationA > 0 && durationB > 0 && abs(durationA - durationB) > DURATION_TOLERANCE_SEC) return false
-        return artistsCompatible(artistsA, artistsB)
+        if (artistsCompatible(artistsA, artistsB)) return true
+        // Credits can differ completely between listings of one recording (e.g. a composer vs. the
+        // group), so the same title, length and album is also the same track.
+        val a = albumA?.let(::norm).orEmpty()
+        return a.isNotEmpty() && a == albumB?.let(::norm).orEmpty()
     }
 
     fun matches(item: SongItem, song: Song): Boolean =
         matches(
             item.title, item.duration ?: -1, item.artists.map { it.name },
             song.song.title, song.song.duration, song.artists.map { it.name },
+            item.album?.name, song.song.albumName,
         )
 
     fun matches(a: Song, b: Song): Boolean =
         matches(
             a.song.title, a.song.duration, a.artists.map { it.name },
             b.song.title, b.song.duration, b.artists.map { it.name },
+            a.song.albumName, b.song.albumName,
         )
 
     /** Collapses same-track entries into one, keeping the one that lists the most artists. */

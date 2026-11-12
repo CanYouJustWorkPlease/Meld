@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.menu
 
+import kotlinx.coroutines.flow.firstOrNull
 import android.widget.Toast
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -78,6 +79,9 @@ fun SpotifyTrackMenu(
     onDismiss: () -> Unit,
     navController: NavController? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
+    /** Non-null shows a heart in the header to like/unlike the track on Spotify. */
+    isLiked: Boolean? = null,
+    onLikeChanged: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
@@ -89,6 +93,52 @@ fun SpotifyTrackMenu(
     var showSelectArtistDialog by rememberSaveable { mutableStateOf(false) }
 
     val qobuzEnabled by rememberPreference(EnableQobuzKey, defaultValue = false)
+
+    var liked by androidx.compose.runtime.remember(track.id) { mutableStateOf(isLiked ?: false) }
+    val syncUtils = com.metrolist.music.LocalSyncUtils.current
+
+    fun toggleLike() {
+        val target = !liked
+        val uri = track.uri ?: "spotify:track:${track.id}"
+        coroutineScope.launch(Dispatchers.IO) {
+            val result =
+                if (target) {
+                    com.metrolist.spotify.Spotify.addToLibrary(listOf(uri))
+                } else {
+                    com.metrolist.spotify.Spotify.removeFromLibrary(listOf(uri))
+                }
+            result
+                .onSuccess {
+                    // Keep the local like in step with Spotify.
+                    val ytId = database.getSpotifyMatch(track.id)?.youtubeId
+                    if (ytId != null) {
+                        database.song(ytId).firstOrNull()?.song?.let { s ->
+                            if (s.liked != target) {
+                                val updated = s.toggleLike()
+                                database.query { update(updated) }
+                            }
+                        }
+                    }
+                    if (!target) {
+                        syncUtils.unlikeEquivalents(
+                            track.name,
+                            track.durationMs / 1000,
+                            track.artists.map { it.name },
+                            ytId ?: "",
+                            track.album?.name,
+                        )
+                    }
+                    withContext(Dispatchers.Main) {
+                        liked = target
+                        onLikeChanged?.invoke(target)
+                    }
+                }.onFailure {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, context.getString(R.string.error_unknown), Toast.LENGTH_SHORT).show()
+                    }
+                }
+        }
+    }
 
     fun resolveAndNavigateToArtist(artistName: String) {
         coroutineScope.launch {
@@ -210,6 +260,20 @@ fun SpotifyTrackMenu(
                 )
             }
         },
+        trailingContent =
+            if (isLiked != null) {
+                {
+                    androidx.compose.material3.IconButton(onClick = { toggleLike() }) {
+                        Icon(
+                            painter = painterResource(if (liked) R.drawable.favorite else R.drawable.favorite_border),
+                            tint = if (liked) MaterialTheme.colorScheme.error else androidx.compose.material3.LocalContentColor.current,
+                            contentDescription = null,
+                        )
+                    }
+                }
+            } else {
+                null
+            },
     )
 
     Spacer(modifier = Modifier.height(12.dp))
@@ -320,27 +384,49 @@ fun SpotifyTrackMenu(
         },
     )
 
-    if (navController != null && track.artists.isNotEmpty()) {
+    if (navController != null && (track.artists.isNotEmpty() || track.album?.id?.isNotBlank() == true)) {
         Material3MenuGroup(
-            items = listOf(
-                Material3MenuItemData(
-                    title = { Text(text = stringResource(R.string.view_artist)) },
-                    description = { Text(text = track.artists.joinToString { it.name }) },
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.artist),
-                            contentDescription = null,
-                        )
-                    },
-                    onClick = {
-                        if (track.artists.size == 1) {
-                            resolveAndNavigateToArtist(track.artists[0].name)
-                        } else {
-                            showSelectArtistDialog = true
-                        }
-                    },
-                ),
-            ),
+            items = buildList {
+                if (track.artists.isNotEmpty()) {
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.view_artist)) },
+                            description = { Text(text = track.artists.joinToString { it.name }) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.artist),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                if (track.artists.size == 1) {
+                                    resolveAndNavigateToArtist(track.artists[0].name)
+                                } else {
+                                    showSelectArtistDialog = true
+                                }
+                            },
+                        ),
+                    )
+                }
+                track.album?.takeIf { it.id.isNotBlank() }?.let { album ->
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.view_album)) },
+                            description = { Text(text = album.name) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.album),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                navController.navigate("spotify_album/${album.id}")
+                                onDismiss()
+                            },
+                        ),
+                    )
+                }
+            },
         )
     }
 

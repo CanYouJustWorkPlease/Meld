@@ -224,6 +224,8 @@ val SpotifyHomeOnlyKey = booleanPreferencesKey("spotifyHomeOnly")
 val SpotifySyncLikesKey = booleanPreferencesKey("spotifySyncLikes")
 val HideYtmLikedSongsKey = booleanPreferencesKey("hideYtmLikedSongs")
 val SpotifySpDcKey = stringPreferencesKey("spotifySpDc")
+/** How the current Spotify session was created: "browser" or "cookie" (sp_dc pasted by the user). */
+val SpotifyLoginMethodKey = stringPreferencesKey("spotifyLoginMethod")
 val SpotifySpKeyKey = stringPreferencesKey("spotifySpKey")
 val SpotifyAccessTokenKey = stringPreferencesKey("spotifyAccessToken")
 val SpotifyTokenExpiryKey = longPreferencesKey("spotifyTokenExpiry")

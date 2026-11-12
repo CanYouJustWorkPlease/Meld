@@ -315,8 +315,14 @@ class SyncUtils @Inject constructor(
     }
 
     /** Unlikes other liked entries that are the same track as the given one (see [SameTrack]). */
-    fun unlikeEquivalents(title: String, durationSec: Int, artistNames: List<String>, excludeId: String) {
-        if (artistNames.isEmpty()) return
+    fun unlikeEquivalents(
+        title: String,
+        durationSec: Int,
+        artistNames: List<String>,
+        excludeId: String,
+        albumName: String? = null,
+    ) {
+        if (artistNames.isEmpty() && albumName.isNullOrBlank()) return
         syncScope.launch {
             try {
                 database.likedSongsWithTitle(title).first()
@@ -325,6 +331,7 @@ class SyncUtils @Inject constructor(
                             SameTrack.matches(
                                 title, durationSec, artistNames,
                                 it.song.title, it.song.duration, it.artists.map { a -> a.name },
+                                albumName, it.song.albumName,
                             )
                     }
                     .forEach { other ->
@@ -347,7 +354,7 @@ class SyncUtils @Inject constructor(
             recentLocalLikes.remove(s.id)
             syncScope.launch {
                 val names = database.song(s.id).firstOrNull()?.artists?.map { it.name }.orEmpty()
-                unlikeEquivalents(s.title, s.duration, names, s.id)
+                unlikeEquivalents(s.title, s.duration, names, s.id, s.albumName)
             }
         }
         syncScope.launch {

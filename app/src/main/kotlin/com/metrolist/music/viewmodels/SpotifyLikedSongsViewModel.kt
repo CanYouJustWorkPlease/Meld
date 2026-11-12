@@ -154,6 +154,16 @@ constructor(
         }
     }
 
+    /** A track was liked/unliked from its menu: drop it right away, or reload when it was re-liked. */
+    fun onLikeChanged(trackId: String, liked: Boolean) {
+        if (liked) {
+            viewModelScope.launch(Dispatchers.IO) { silentReload() }
+        } else {
+            _tracks.value = _tracks.value.filterNot { it.id == trackId }
+            _total.value = (_total.value - 1).coerceAtLeast(0)
+        }
+    }
+
     fun retry() = loadLikedSongs()
 
     companion object {

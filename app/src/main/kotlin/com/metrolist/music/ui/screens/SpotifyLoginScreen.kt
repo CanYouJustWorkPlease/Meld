@@ -100,58 +100,6 @@ fun SpotifyLoginScreen(navController: NavController) {
     var hasError by remember { mutableStateOf(false) }
     var retryCount by remember { mutableIntStateOf(0) }
     val tokenFetchStarted = remember { AtomicBoolean(false) }
-    var showCookieDialog by remember { mutableStateOf(false) }
-    var cookieInput by remember { mutableStateOf("") }
-
-    if (showCookieDialog) {
-        AlertDialog(
-            onDismissRequest = { showCookieDialog = false },
-            title = { Text("Log in with sp_dc cookie") },
-            text = {
-                Column {
-                    Text(
-                        "Log in at open.spotify.com in your normal browser, copy the value " +
-                            "of the sp_dc cookie and paste it here. Treat it like a password.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = cookieInput,
-                        onValueChange = { cookieInput = it },
-                        label = { Text("sp_dc") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = cookieInput.isNotBlank(),
-                    onClick = {
-                        val pasted = cookieInput
-                        cookieInput = ""
-                        showCookieDialog = false
-                        if (tokenFetchStarted.compareAndSet(false, true)) {
-                            extractAndFetchToken(
-                                view = null,
-                                context = context,
-                                scope = scope,
-                                navController = navController,
-                                setProcessing = { isProcessing = it },
-                                setStatus = { statusMessage = it },
-                                setError = { hasError = it },
-                                tokenFetchStarted = tokenFetchStarted,
-                                spDcOverride = pasted,
-                            )
-                        }
-                    },
-                ) { Text("Log in") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCookieDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -163,9 +111,6 @@ fun SpotifyLoginScreen(navController: NavController) {
                 ) {
                     Icon(painterResource(R.drawable.arrow_back), contentDescription = null)
                 }
-            },
-            actions = {
-                TextButton(onClick = { showCookieDialog = true }) { Text("Use cookie") }
             },
         )
 
@@ -816,6 +761,7 @@ private fun extractAndFetchToken(
             context.dataStore.edit { prefs ->
                 prefs[SpotifySpDcKey] = spDc
                 prefs[SpotifySpKeyKey] = spKey
+                prefs[com.metrolist.music.constants.SpotifyLoginMethodKey] = if (spDcOverride != null) "cookie" else "browser"
             }
 
             withContext(Dispatchers.Main) {

@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens
 
+import androidx.compose.runtime.collectAsState
 import android.app.Activity
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -288,6 +289,32 @@ fun NavGraphBuilder.navigationBuilder(
             navController = navController,
             sectionTitle = backStackEntry.arguments?.getString("title").orEmpty(),
             viewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(artistEntry ?: backStackEntry),
+        )
+    }
+
+    composable(
+        route = "home_section?title={title}",
+        arguments =
+            listOf(
+                navArgument("title") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+    ) { backStackEntry ->
+        // Show the home page's own section, in the same order as on the home page.
+        val homeEntry =
+            remember(backStackEntry) {
+                runCatching { navController.getBackStackEntry(Screens.Home.route) }.getOrNull()
+            }
+        val homeViewModel: com.metrolist.music.viewmodels.HomeViewModel =
+            androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(homeEntry ?: backStackEntry)
+        val homePage by homeViewModel.homePage.collectAsState()
+        val title = backStackEntry.arguments?.getString("title").orEmpty()
+        com.metrolist.music.ui.screens.artist.YTItemsGridScreen(
+            navController = navController,
+            title = title,
+            sourceItems = homePage?.sections?.firstOrNull { it.title == title }?.items.orEmpty(),
         )
     }
 

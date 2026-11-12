@@ -115,25 +115,71 @@ fun YouTubeSongMenu(
     val listenTogetherManager = LocalListenTogetherManager.current
     val isPinned by database.speedDialDao.isPinned(song.id).collectAsStateWithLifecycle(initialValue = false)
     val artistNameAliases = LocalArtistNameAliases.current
-    // Search results often lack the album and/or artist ids, which hid "View artist"/"View album".
-    // Look the song up to fill them in.
-    var resolvedSong by remember(song.id) { mutableStateOf<SongItem?>(null) }
+    // Search results often lack the album and/or artist ids (or carry a non-album id), which hid
+    // "View artist"/"View album". Look them up so both are available.
+    var resolvedArtists by remember(song.id) { mutableStateOf<List<com.metrolist.innertube.models.Artist>?>(null) }
+    var resolvedAlbum by remember(song.id) { mutableStateOf<com.metrolist.innertube.models.Album?>(null) }
     LaunchedEffect(song.id) {
-        if (song.album == null || song.artists.any { it.id == null }) {
-            resolvedSong =
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    com.metrolist.innertube.YouTube
-                        .next(com.metrolist.innertube.models.WatchEndpoint(videoId = song.id))
-                        .getOrNull()
-                        ?.items
-                        ?.firstOrNull { it.id == song.id }
+        val needArtists = song.artists.isEmpty() || song.artists.any { it.id == null }
+        val albumId = song.album?.id
+        val needAlbum = albumId == null || !(albumId.startsWith("MPREb_") || albumId.startsWith("MPSP"))
+        if (!needArtists && !needAlbum) return@LaunchedEffect
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val yt = com.metrolist.innertube.YouTube
+            val fromNext =
+                runCatching {
+                    yt.next(com.metrolist.innertube.models.WatchEndpoint(videoId = song.id)).getOrNull()?.items?.let { l ->
+                        l.firstOrNull { it.id == song.id }
+                            ?: l.firstOrNull { com.metrolist.music.utils.SameTrack.norm(it.title) == com.metrolist.music.utils.SameTrack.norm(song.title) }
+                    }
+                }.getOrNull()
+
+            if (needArtists) {
+                var artists = fromNext?.artists?.takeIf { l -> l.isNotEmpty() && l.all { it.id != null } }
+                if (artists == null) {
+                    val named = fromNext?.artists?.takeIf { it.isNotEmpty() } ?: song.artists
+                    val filled =
+                        named.map { a ->
+                            if (a.id != null) {
+                                a
+                            } else {
+                                val hit =
+                                    runCatching {
+                                        yt.search(a.name, com.metrolist.innertube.YouTube.SearchFilter.FILTER_ARTIST)
+                                            .getOrNull()?.items
+                                            ?.filterIsInstance<com.metrolist.innertube.models.ArtistItem>()
+                                            ?.firstOrNull { it.title.equals(a.name, ignoreCase = true) }
+                                    }.getOrNull()
+                                if (hit != null) com.metrolist.innertube.models.Artist(name = a.name, id = hit.id) else a
+                            }
+                        }
+                    if (filled.any { it.id != null }) artists = filled
                 }
+                resolvedArtists = artists
+            }
+
+            if (needAlbum) {
+                var album = fromNext?.album?.takeIf { it.id.startsWith("MPREb_") }
+                if (album == null) {
+                    val albumName = song.album?.name
+                    val artistName = (fromNext?.artists ?: song.artists).firstOrNull()?.name
+                    if (albumName != null && artistName != null) {
+                        album =
+                            runCatching {
+                                yt.search("$albumName $artistName", com.metrolist.innertube.YouTube.SearchFilter.FILTER_ALBUM)
+                                    .getOrNull()?.items
+                                    ?.filterIsInstance<com.metrolist.innertube.models.AlbumItem>()
+                                    ?.firstOrNull { it.title.equals(albumName, ignoreCase = true) }
+                                    ?.let { com.metrolist.innertube.models.Album(name = it.title, id = it.browseId) }
+                            }.getOrNull()
+                    }
+                }
+                resolvedAlbum = album
+            }
         }
     }
-    val effectiveAlbum = song.album ?: resolvedSong?.album
-    val effectiveArtists =
-        if (song.artists.isNotEmpty() && song.artists.all { it.id != null }) song.artists
-        else resolvedSong?.artists?.takeIf { it.isNotEmpty() } ?: song.artists
+    val effectiveAlbum = resolvedAlbum ?: song.album
+    val effectiveArtists = resolvedArtists ?: song.artists
     val artists = remember(effectiveArtists, artistNameAliases) {
         effectiveArtists.mapNotNull {
             it.id?.let { artistId ->
@@ -293,7 +339,7 @@ fun YouTubeSongMenu(
                         // Regular song: toggle like
                         if (equivalentLiked && librarySong?.song?.liked != true) {
                             // Shown as liked because the same track is liked under another id: unlike that.
-                            syncUtils.unlikeEquivalents(song.title, song.duration ?: -1, song.artists.map { it.name }, song.id)
+                            syncUtils.unlikeEquivalents(song.title, song.duration ?: -1, song.artists.map { it.name }, song.id, song.album?.name)
                         } else
                         database.transaction {
                             librarySong.let { librarySong ->
@@ -703,7 +749,7 @@ fun YouTubeSongMenu(
 
         item {
             // Check if this is a podcast episode (album ID doesn't start with MPREb_)
-            val isPodcast = effectiveAlbum?.let { !it.id.startsWith("MPREb_") } ?: false
+            val isPodcast = effectiveAlbum?.id?.startsWith("MPSP") == true
 
             Material3MenuGroup(
                 items = buildList {

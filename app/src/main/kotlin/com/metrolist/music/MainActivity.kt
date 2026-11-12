@@ -1596,7 +1596,13 @@ class MainActivity : FragmentActivity() {
         Regex("(?i)discover\\s+(.+?)\\s+by\\s+(.+?)[.!]*$").find(cleaned)?.let {
             return "${it.groupValues[1]} ${it.groupValues[2]}".trim()
         }
-        return null
+        // Another language or wording: the shared text still names the song and artist, so search
+        // for it as it is, minus the link and the word "Shazam".
+        return cleaned
+            .replace(Regex("(?i)shazam\\w*"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim(' ', '.', '!', ',', ':', '-')
+            .takeIf { it.length >= 3 }
     }
 
     /** Falls back to the title of the shared Shazam page, e.g. "Victory by Two Steps From Hell | Shazam". */

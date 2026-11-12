@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.settings.integrations
 
+import com.metrolist.music.constants.SpotifyLoginMethodKey
 import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
@@ -144,41 +145,149 @@ fun SpotifySettings(
             title = stringResource(R.string.account),
         )
 
+        var spotifyLoginMethod by rememberPreference(SpotifyLoginMethodKey, "browser")
+        val cookieLoggedIn = isLoggedIn && spotifyLoginMethod == "cookie"
+        val browserLoggedIn = isLoggedIn && !cookieLoggedIn
+
+        val doLogout: () -> Unit = {
+            spotifyAccessToken = ""
+            spotifySpDc = ""
+            spotifySpKey = ""
+            spotifyTokenExpiry = 0L
+            spotifyUsername = ""
+            spotifyUserId = ""
+            spotifyLoginMethod = "browser"
+            onEnableSpotifyChange(false)
+            CookieManager.getInstance().removeAllCookies(null)
+            // Clear all user-specific Spotify caches so a subsequent login
+            // (possibly a different account) never surfaces stale data.
+            SpotifyMetadataRegistry.clearAll()
+            coroutineScope.launch { SpotifyProfileCache.clearAllPersisted(context) }
+        }
+
+        // Method 1: log in through the Spotify web page.
         PreferenceEntry(
             title = {
                 Text(
-                    text = if (isLoggedIn) spotifyUsername else stringResource(R.string.spotify_not_logged_in),
-                    modifier = Modifier.alpha(if (isLoggedIn) 1f else 0.5f),
+                    text = if (browserLoggedIn) spotifyUsername else stringResource(R.string.spotify_not_logged_in),
+                    modifier = Modifier.alpha(if (browserLoggedIn) 1f else 0.5f),
                 )
             },
             description = null,
             icon = { Icon(painterResource(R.drawable.spotify), null) },
             trailingContent = {
-                if (isLoggedIn) {
-                    OutlinedButton(onClick = {
-                        spotifyAccessToken = ""
-                        spotifySpDc = ""
-                        spotifySpKey = ""
-                        spotifyTokenExpiry = 0L
-                        spotifyUsername = ""
-                        spotifyUserId = ""
-                        onEnableSpotifyChange(false)
-                        CookieManager.getInstance().removeAllCookies(null)
-                        // Clear all user-specific Spotify caches so a subsequent login
-                        // (possibly a different account) never surfaces stale data.
-                        SpotifyMetadataRegistry.clearAll()
-                        coroutineScope.launch { SpotifyProfileCache.clearAllPersisted(context) }
-                    }) {
+                if (browserLoggedIn) {
+                    OutlinedButton(onClick = doLogout) {
                         Text(stringResource(R.string.action_logout))
                     }
                 } else {
                     OutlinedButton(
                         onClick = { navController.navigate("settings/spotify/login") },
+                        enabled = !cookieLoggedIn,
                     ) {
                         Text(stringResource(R.string.action_login))
                     }
                 }
             },
+        )
+
+        // Method 2: paste the sp_dc cookie. Only one method can be active at a time.
+        var showCookieDialog by remember { mutableStateOf(false) }
+        var cookieInput by remember { mutableStateOf("") }
+        var cookieBusy by remember { mutableStateOf(false) }
+        var cookieError by remember { mutableStateOf<String?>(null) }
+
+        if (showCookieDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { if (!cookieBusy) showCookieDialog = false },
+                title = { Text("Log in using sp_dc cookie") },
+                text = {
+                    Column {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = cookieInput,
+                            onValueChange = { cookieInput = it },
+                            label = { Text("sp_dc") },
+                            singleLine = true,
+                            enabled = !cookieBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        cookieError?.let {
+                            Spacer(Modifier.size(8.dp))
+                            Text(
+                                text = it,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (cookieBusy) {
+                            Spacer(Modifier.size(12.dp))
+                            androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        enabled = cookieInput.isNotBlank() && !cookieBusy,
+                        onClick = {
+                            cookieBusy = true
+                            cookieError = null
+                            coroutineScope.launch {
+                                loginWithSpDcCookie(context, cookieInput)
+                                    .onSuccess {
+                                        cookieInput = ""
+                                        showCookieDialog = false
+                                    }.onFailure { e ->
+                                        cookieError = e.message ?: "Login failed"
+                                    }
+                                cookieBusy = false
+                            }
+                        },
+                    ) { Text(stringResource(R.string.action_login)) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        enabled = !cookieBusy,
+                        onClick = { showCookieDialog = false },
+                    ) { Text("Cancel") }
+                },
+            )
+        }
+
+        PreferenceEntry(
+            title = {
+                Text(
+                    text = if (cookieLoggedIn) spotifyUsername else stringResource(R.string.spotify_not_logged_in),
+                    modifier = Modifier.alpha(if (cookieLoggedIn) 1f else 0.5f),
+                )
+            },
+            description = null,
+            icon = { Icon(painterResource(R.drawable.spotify), null) },
+            trailingContent = {
+                if (cookieLoggedIn) {
+                    OutlinedButton(onClick = doLogout) {
+                        Text(stringResource(R.string.action_logout))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { showCookieDialog = true },
+                        enabled = !browserLoggedIn,
+                    ) {
+                        Text("Log in using sp_dc cookie")
+                    }
+                }
+            },
+        )
+
+        Text(
+            text =
+                "How to get the sp_dc cookie:\n" +
+                    "1. Log in at open.spotify.com in a browser on a computer (or your phone's browser in desktop mode).\n" +
+                    "2. Open the developer tools (F12 in Chrome/Edge/Firefox) and go to Application (Chrome/Edge) or Storage (Firefox) → Cookies → https://open.spotify.com.\n" +
+                    "3. Find the cookie named sp_dc and copy its value.\n" +
+                    "4. Tap \"Log in using sp_dc cookie\" above and paste it. Treat it like a password: anyone with it can access your Spotify account.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
 
         PreferenceGroupTitle(
