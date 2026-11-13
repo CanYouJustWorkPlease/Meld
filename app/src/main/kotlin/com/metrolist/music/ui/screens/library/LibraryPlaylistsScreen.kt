@@ -221,7 +221,7 @@ fun LibraryPlaylistsScreen(
 
     val (showLiked) = rememberPreference(ShowLikedPlaylistKey, true)
     val (spotifySyncLikes) = rememberPreference(SpotifySyncLikesKey, false)
-    val (hideYtmLikedSongs) = rememberPreference(HideYtmLikedSongsKey, true)
+    val (hideYtmLikedSongs) = rememberPreference(HideYtmLikedSongsKey, false)
     val hideYtmLiked = spotifySyncLikes && hideYtmLikedSongs
     val (showDownloaded) = rememberPreference(ShowDownloadedPlaylistKey, true)
     val (showTop) = rememberPreference(ShowTopPlaylistKey, true)

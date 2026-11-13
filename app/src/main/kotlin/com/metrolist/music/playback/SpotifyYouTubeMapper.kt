@@ -301,6 +301,13 @@ class SpotifyYouTubeMapper(
         var best: SpotifyTrack? = null
         var bestScore = 0.0
         for (candidate in results) {
+            // Artist + a vaguely similar title used to be enough ("Mountain Call" matched "Moving
+            // Mountains" by the same artist and liked the wrong song). The title must really match,
+            // and the length must be close when both are known.
+            if (!titlesClose(title, candidate.name)) continue
+            val candidateSec = candidate.durationMs / 1000
+            if (durationSec > 0 && candidateSec > 0 && kotlin.math.abs(durationSec - candidateSec) > 20) continue
+
             // A collaboration lists several artists on Spotify; the YouTube song may be filed under
             // any one of them, so score against each artist (and all of them) and keep the best.
             val names = candidate.artists.map { it.name }
@@ -346,6 +353,24 @@ class SpotifyYouTubeMapper(
 
         Timber.w("Reverse lookup: no match above threshold for '$query'")
         null
+    }
+
+    /** True when two titles are the same song title (case, punctuation and brackets aside). */
+    private fun titlesClose(a: String, b: String): Boolean {
+        fun clean(t: String) =
+            com.metrolist.music.utils.SameTrack.norm(
+                t.replace(Regex("\\(.*?\\)|\\[.*?\\]"), " "),
+            )
+        val x = clean(a)
+        val y = clean(b)
+        if (x.isEmpty() || y.isEmpty()) return false
+        if (x == y) return true
+        if (x.length >= 4 && y.length >= 4 && (x.contains(y) || y.contains(x))) return true
+        val bx = x.windowed(2).toSet()
+        val by = y.windowed(2).toSet()
+        if (bx.isEmpty() || by.isEmpty()) return false
+        val dice = 2.0 * bx.intersect(by).size / (bx.size + by.size)
+        return dice >= 0.75
     }
 
     companion object {

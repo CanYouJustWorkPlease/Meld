@@ -321,6 +321,9 @@ fun SpotifyLoginScreen(navController: NavController) {
                                 // navigation within the login flow, not just the first load.
                                 applyLoginLayoutFix(bl, view)
                                 probeDom(bl, view)
+                                if (url?.contains("accounts.spotify.com") == true) {
+                                    view?.evaluateJavascript(EMAIL_PASSWORD_BUTTON_JS, null)
+                                }
 
                                 if (url?.startsWith("https://open.spotify.com") == true &&
                                     tokenFetchStarted.compareAndSet(false, true)
@@ -870,3 +873,46 @@ private fun classifyLoginError(context: Context, e: Exception): String {
  */
 private const val USER_AGENT_DESKTOP =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+/**
+ * Spotify's login page offers e-mail + Google/Facebook/Apple. This adds a "Continue with email and
+ * password" button (a copy of the Google button, so it looks the same) above "Continue with
+ * Google" that opens the password login page. The page re-renders as a single-page app, so it is
+ * re-added whenever the DOM changes.
+ */
+private val EMAIL_PASSWORD_BUTTON_JS =
+    """
+    (function () {
+      var PASSWORD_URL = 'https://accounts.spotify.com/login/password?continue=https%3A%2F%2Fopen.spotify.com%2F';
+      function findGoogle() {
+        var els = document.querySelectorAll('button, a, [role="button"]');
+        for (var i = 0; i < els.length; i++) {
+          if (/continue with google/i.test(els[i].textContent || '')) return els[i];
+        }
+        return null;
+      }
+      function inject() {
+        if (document.getElementById('meld-email-password-btn')) return;
+        var google = findGoogle();
+        if (!google) return;
+        var target = google.closest('li') || google;
+        var wrap = target.cloneNode(true);
+        wrap.id = 'meld-email-password-btn';
+        var clickable = wrap.matches('button, a, [role="button"]') ? wrap : wrap.querySelector('button, a, [role="button"]');
+        if (!clickable) return;
+        clickable.textContent = 'Continue with email and password';
+        if (clickable.tagName === 'A') clickable.setAttribute('href', PASSWORD_URL);
+        wrap.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.location.href = PASSWORD_URL;
+        }, true);
+        target.parentNode.insertBefore(wrap, target);
+      }
+      if (!window.__meldPasswordButton) {
+        window.__meldPasswordButton = true;
+        new MutationObserver(inject).observe(document.documentElement, { childList: true, subtree: true });
+      }
+      inject();
+    })();
+    """.trimIndent()

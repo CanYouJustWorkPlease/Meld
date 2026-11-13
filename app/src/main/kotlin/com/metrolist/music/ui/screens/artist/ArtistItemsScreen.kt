@@ -5,6 +5,8 @@
 
 package com.metrolist.music.ui.screens.artist
 
+import com.metrolist.music.ui.component.Numbered
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -94,6 +96,11 @@ fun ArtistItemsScreen(
         }
     }
     val itemsPage by viewModel.itemsPage.collectAsStateWithLifecycle()
+    var reversed by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    // Reversing needs the whole list: load the remaining pages first.
+    LaunchedEffect(itemsPage?.continuation, reversed) {
+        if (reversed && itemsPage?.continuation != null) viewModel.loadMore()
+    }
 
     // Album/single lists are short: load every page up front so the grid (and its sorting) is
     // complete without having to scroll to the end first.
@@ -138,11 +145,12 @@ fun ArtistItemsScreen(
             state = lazyListState,
             contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
         ) {
-            items(
-                items = itemsPage?.items.orEmpty().distinctBy { it.id },
-                key = { "artist_items_list_${it.id}" },
-            ) { item ->
-                YouTubeListItem(
+            itemsIndexed(
+                items = itemsPage?.items.orEmpty().distinctBy { it.id }.let { if (reversed) it.reversed() else it },
+                key = { _, it -> "artist_items_list_${it.id}" },
+            ) { listIndex, item ->
+                Numbered(listIndex + 1) {
+                    YouTubeListItem(
                     item = item,
                     isActive =
                         when (item) {
@@ -257,6 +265,7 @@ fun ArtistItemsScreen(
                                 }
                             },
                 )
+                }
             }
 
             if (itemsPage?.continuation != null) {
@@ -397,6 +406,14 @@ fun ArtistItemsScreen(
     TopAppBar(
         title = { Text(title) },
         actions = {
+            if (itemsPage?.items?.firstOrNull() is SongItem) {
+                androidx.compose.material3.IconButton(onClick = { reversed = !reversed }) {
+                    Icon(
+                        painter = painterResource(if (reversed) R.drawable.arrow_upward else R.drawable.arrow_downward),
+                        contentDescription = null,
+                    )
+                }
+            }
             if (itemsPage?.items?.any { it is AlbumItem } == true) {
                 androidx.compose.material3.TextButton(
                     onClick = { yearAscending = if (yearAscending == true) false else true },

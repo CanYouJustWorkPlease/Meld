@@ -423,7 +423,7 @@ fun SpotifySettings(
             if (syncLikes) {
                 val (hideYtmLikedSongs, onHideYtmLikedSongsChange) = rememberPreference(
                     key = HideYtmLikedSongsKey,
-                    defaultValue = true,
+                    defaultValue = false,
                 )
                 SwitchPreference(
                     title = { Text(stringResource(R.string.hide_ytm_liked_songs)) },

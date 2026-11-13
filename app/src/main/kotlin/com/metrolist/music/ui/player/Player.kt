@@ -1537,14 +1537,7 @@ fun BottomSheetPlayer(
                             val isNextPressed by nextInteractionSource.collectIsPressedAsState()
 
                             val playPauseWeight by animateFloatAsState(
-                                targetValue =
-                                    if (isPlayPausePressed) {
-                                        1.9f
-                                    } else if (isBackPressed || isNextPressed) {
-                                        1.1f
-                                    } else {
-                                        1.3f
-                                    },
+                                targetValue = 1.3f, // fixed: the button no longer resizes when pressed
                                 animationSpec =
                                     spring(
                                         dampingRatio = 0.6f,
@@ -1554,14 +1547,7 @@ fun BottomSheetPlayer(
                             )
 
                             val backButtonWeight by animateFloatAsState(
-                                targetValue =
-                                    if (isBackPressed) {
-                                        0.65f
-                                    } else if (isPlayPausePressed) {
-                                        0.35f
-                                    } else {
-                                        0.45f
-                                    },
+                                targetValue = 0.45f,
                                 animationSpec =
                                     spring(
                                         dampingRatio = 0.6f,
@@ -1571,14 +1557,7 @@ fun BottomSheetPlayer(
                             )
 
                             val nextButtonWeight by animateFloatAsState(
-                                targetValue =
-                                    if (isNextPressed) {
-                                        0.65f
-                                    } else if (isPlayPausePressed) {
-                                        0.35f
-                                    } else {
-                                        0.45f
-                                    },
+                                targetValue = 0.45f,
                                 animationSpec =
                                     spring(
                                         dampingRatio = 0.6f,
