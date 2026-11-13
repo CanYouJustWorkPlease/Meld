@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.playlist
 
+import com.metrolist.music.ui.component.Numbered
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -609,7 +610,8 @@ fun LocalPlaylistScreen(
                     }
 
                     val content: @Composable () -> Unit = {
-                        SongListItem(
+                        Numbered(index + 1) {
+                            SongListItem(
                             song = song.song,
                             isActive = song.song.id == mediaMetadata?.id,
                             isPlaying = isPlaying,
@@ -699,6 +701,7 @@ fun LocalPlaylistScreen(
                                         },
                                     ),
                         )
+                        }
                     }
 
                     if (locked || inSelectMode || !swipeRemoveEnabled) {

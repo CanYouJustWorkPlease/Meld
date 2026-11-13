@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.search
 
+import com.metrolist.music.ui.component.Numbered
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -353,14 +354,9 @@ fun OnlineSearchResult(
 
                                 is AlbumItem -> {
                                     if (item.id.isSpotifyId()) {
-                                        coroutineScope.launch {
-                                            val searchQuery = "${item.title} ${item.artists?.firstOrNull()?.name.orEmpty()}"
-                                            val ytResult = YouTube.search(searchQuery, YouTube.SearchFilter.FILTER_ALBUM).getOrNull()
-                                            val ytAlbum = ytResult?.items?.firstOrNull { it is AlbumItem }
-                                            if (ytAlbum != null) {
-                                                navController.navigate("album/${ytAlbum.id}")
-                                            }
-                                        }
+                                        // Open the Spotify album itself: matching it to a YouTube album by
+                                        // search could pick the wrong one or nothing (blank page).
+                                        navController.navigate("spotify_album/${item.id.stripSpotifyPrefix()}")
                                     } else {
                                         navController.navigate("album/${item.id}")
                                     }
@@ -581,7 +577,15 @@ fun OnlineSearchResult(
                             itemsIndexed(
                                 items = summary.items,
                                 key = { index, item -> "${summary.title}/${item.id}/$index" },
-                                itemContent = { index, item -> ytItemContent(item) },
+                                itemContent = { index, item ->
+                                    if (item is SongItem) {
+                                        Numbered(summary.items.take(index + 1).count { it is SongItem }) {
+                                            ytItemContent(item)
+                                        }
+                                    } else {
+                                        ytItemContent(item)
+                                    }
+                                },
                             )
                         }
 
@@ -594,10 +598,16 @@ fun OnlineSearchResult(
                             }
                         }
                     } else {
-                        items(
+                        itemsIndexed(
                             items = itemsPage?.items.orEmpty().distinctBy { it.id },
-                            key = { "filtered_${it.id}" },
-                            itemContent = ytItemContent,
+                            key = { _, it -> "filtered_${it.id}" },
+                            itemContent = { index, item ->
+                                if (item is SongItem) {
+                                    Numbered(index + 1) { ytItemContent(item) }
+                                } else {
+                                    ytItemContent(item)
+                                }
+                            },
                         )
 
                         if (itemsPage?.continuation != null) {

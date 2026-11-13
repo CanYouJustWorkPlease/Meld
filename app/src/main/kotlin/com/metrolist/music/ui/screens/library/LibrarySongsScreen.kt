@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.library
 
+import com.metrolist.music.ui.component.Numbered
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -435,7 +436,8 @@ fun LibrarySongsScreen(
                 key = { index, item -> "${item.song.id}_$index" },
                 contentType = { _, _ -> CONTENT_TYPE_SONG },
             ) { index, song ->
-                SongListItem(
+                Numbered(index + 1) {
+                    SongListItem(
                     song = song,
                     showInLibraryIcon = true,
                     isActive = song.id == mediaMetadata?.id,
@@ -476,6 +478,7 @@ fun LibrarySongsScreen(
                                 }
                             }.animateItem(),
                 )
+                }
             }
         }
 

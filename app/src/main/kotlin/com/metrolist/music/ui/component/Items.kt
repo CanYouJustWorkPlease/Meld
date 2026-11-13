@@ -7,6 +7,8 @@
 
 package com.metrolist.music.ui.component
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
@@ -249,6 +251,18 @@ private fun ArtistLinksText(
     )
 }
 
+/** Position to show in front of a list row (1-based), or null for no number. */
+val LocalListNumber = compositionLocalOf<Int?> { null }
+
+/** Shows [number] in front of the list rows composed inside [content]. */
+@Composable
+fun Numbered(
+    number: Int,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(LocalListNumber provides number, content = content)
+}
+
 @Composable
 inline fun ListItem(
     modifier: Modifier = Modifier,
@@ -284,6 +298,16 @@ inline fun ListItem(
                 .padding(horizontal = 8.dp)
         }
     ) {
+        LocalListNumber.current?.let { number ->
+            Text(
+                text = number.toString(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.width(30.dp),
+            )
+        }
         Box(
             modifier = Modifier.padding(6.dp),
             contentAlignment = Alignment.Center

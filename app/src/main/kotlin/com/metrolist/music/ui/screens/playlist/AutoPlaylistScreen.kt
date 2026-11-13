@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.playlist
 
+import com.metrolist.music.ui.component.Numbered
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -561,7 +562,8 @@ fun AutoPlaylistScreen(
                             }
                         }
 
-                        SongListItem(
+                        Numbered(index + 1) {
+                            SongListItem(
                             song = song,
                             isActive = song.song.id == mediaMetadata?.id,
                             isPlaying = isPlaying,
@@ -618,6 +620,7 @@ fun AutoPlaylistScreen(
                                         },
                                     ).animateItem(),
                         )
+                        }
                     }
                 }
             }

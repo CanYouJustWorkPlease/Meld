@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.playlist
 
+import com.metrolist.music.ui.component.Numbered
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -335,6 +336,19 @@ fun SpotifyLikedSongsScreen(
                 val originalIndex = if (isSearching) sortedTracks.indexOf(track).coerceAtLeast(0) else index
 
                 val isActive = currentSpotifyId != null && currentSpotifyId == track.id
+                val openTrackMenu = {
+                    menuState.show {
+                        SpotifyTrackMenu(
+                            track = track,
+                            mapper = mapper,
+                            onDismiss = menuState::dismiss,
+                            navController = navController,
+                            isLiked = true,
+                            onLikeChanged = { nowLiked -> viewModel.onLikeChanged(track.id, nowLiked) },
+                        )
+                    }
+                }
+                Numbered(index + 1) {
                 ListItem(
                     title = track.name,
                     subtitle = joinByBullet(
@@ -351,6 +365,14 @@ fun SpotifyLikedSongsScreen(
                             modifier = Modifier.size(ListThumbnailSize),
                         )
                     },
+                    trailingContent = {
+                        androidx.compose.material3.IconButton(onClick = { openTrackMenu() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.more_vert),
+                                contentDescription = null,
+                            )
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .combinedClickable(
@@ -363,21 +385,11 @@ fun SpotifyLikedSongsScreen(
                                     )
                                 )
                             },
-                            onLongClick = {
-                                menuState.show {
-                                    SpotifyTrackMenu(
-                                        track = track,
-                                        mapper = mapper,
-                                        onDismiss = menuState::dismiss,
-                                        navController = navController,
-                                        isLiked = true,
-                                        onLikeChanged = { nowLiked -> viewModel.onLikeChanged(track.id, nowLiked) },
-                                    )
-                                }
-                            },
+                            onLongClick = { openTrackMenu() },
                         )
                         .animateItem(),
                 )
+                }
             }
         }
 

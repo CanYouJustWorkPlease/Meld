@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.artist
 
+import com.metrolist.music.ui.component.Numbered
 import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -751,10 +752,11 @@ fun ArtistScreen(
                         }
 
                         if ((section.items.firstOrNull() as? SongItem)?.album != null) {
-                            items(
+                            itemsIndexed(
                                 items = distinctItemsBySection.getOrNull(index) ?: section.items,
-                                key = { "youtube_song_${it.id}" },
-                            ) { song ->
+                                key = { _, it -> "youtube_song_${it.id}" },
+                            ) { songIndex, song ->
+                                Numbered(songIndex + 1) {
                                 YouTubeListItem(
                                     item = song as SongItem,
                                     isActive = mediaMetadata?.id == song.id,
@@ -804,6 +806,7 @@ fun ArtistScreen(
                                                 },
                                             ).animateItem(),
                                 )
+                                }
                             }
                         } else {
                             item(key = "section_list_${section.title}") {

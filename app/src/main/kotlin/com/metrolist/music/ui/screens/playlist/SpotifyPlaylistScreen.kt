@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.playlist
 
+import com.metrolist.music.ui.component.Numbered
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -470,7 +471,8 @@ fun SpotifyPlaylistScreen(
 
                     val isActive = currentSpotifyId != null && currentSpotifyId == track.id
                     val content: @Composable () -> Unit = {
-                        ListItem(
+                        Numbered(index + 1) {
+                            ListItem(
                             title = track.name,
                             subtitle = joinByBullet(
                                 track.artists.joinToString { it.name },
@@ -533,6 +535,7 @@ fun SpotifyPlaylistScreen(
                                     },
                                 ),
                         )
+                        }
                     }
 
                     if (locked || !swipeRemoveEnabled) {

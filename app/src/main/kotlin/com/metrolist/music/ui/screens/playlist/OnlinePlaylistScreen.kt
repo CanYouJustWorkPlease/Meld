@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.playlist
 
+import com.metrolist.music.ui.component.Numbered
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -271,7 +272,8 @@ fun OnlinePlaylistScreen(
                             }
                         }
 
-                        YouTubeListItem(
+                        Numbered(index + 1) {
+                            YouTubeListItem(
                             item = songItem,
                             isActive = mediaMetadata?.id == songItem.id,
                             isPlaying = isPlaying,
@@ -322,6 +324,7 @@ fun OnlinePlaylistScreen(
                                 }
                             },
                         )
+                        }
                     }
 
                     if (isLoadingMore) {

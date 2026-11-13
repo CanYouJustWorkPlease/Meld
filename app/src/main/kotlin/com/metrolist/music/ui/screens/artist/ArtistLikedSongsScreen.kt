@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.artist
 
+import com.metrolist.music.ui.component.Numbered
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -96,7 +97,8 @@ fun ArtistLikedSongsScreen(
                 items = songs,
                 key = { index, item -> "${item.id}_$index" },
             ) { index, song ->
-                SongListItem(
+                Numbered(index + 1) {
+                    SongListItem(
                     song = song,
                     showInLibraryIcon = true,
                     isActive = song.id == mediaMetadata?.id,
@@ -146,6 +148,7 @@ fun ArtistLikedSongsScreen(
                                 },
                             ).animateItem(),
                 )
+                }
             }
         }
 
