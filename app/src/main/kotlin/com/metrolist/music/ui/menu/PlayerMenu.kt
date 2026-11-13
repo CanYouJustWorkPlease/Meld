@@ -151,9 +151,26 @@ fun PlayerMenu(
 
     val isPinned by database.speedDialDao.isPinned(mediaMetadata.id).collectAsStateWithLifecycle(initialValue = false)
 
+    // The playing song may lack artist ids or carry a non-album id (search/Spotify results); look
+    // them up so "View artist"/"View album" are available.
+    var resolvedArtists by remember(mediaMetadata.id) { mutableStateOf<List<MediaMetadata.Artist>?>(null) }
+    var resolvedAlbum by remember(mediaMetadata.id) { mutableStateOf<MediaMetadata.Album?>(null) }
+    LaunchedEffect(mediaMetadata.id) {
+        val credits =
+            com.metrolist.music.utils.resolveSongCredits(
+                videoId = mediaMetadata.id,
+                title = mediaMetadata.title,
+                artists = mediaMetadata.artists.map { com.metrolist.innertube.models.Artist(name = it.name, id = it.id) },
+                album = mediaMetadata.album?.let { com.metrolist.innertube.models.Album(name = it.title, id = it.id) },
+            )
+        credits.artists?.let { l -> resolvedArtists = l.map { MediaMetadata.Artist(id = it.id, name = it.name) } }
+        credits.album?.let { resolvedAlbum = MediaMetadata.Album(id = it.id, title = it.name) }
+    }
+    val effectiveAlbum = resolvedAlbum ?: mediaMetadata.album
+    val effectiveArtists = resolvedArtists ?: mediaMetadata.artists
     val artists =
-        remember(mediaMetadata.artists) {
-            mediaMetadata.artists.filter { it.id != null }
+        remember(effectiveArtists) {
+            effectiveArtists.filter { it.id != null }
         }
 
     var showChoosePlaylistDialog by rememberSaveable {
@@ -482,8 +499,8 @@ fun PlayerMenu(
         }
 
         item {
-            // Check if this is a podcast episode (album ID doesn't start with MPREb_)
-            val isPodcast = mediaMetadata.album?.let { !it.id.startsWith("MPREb_") } ?: false
+            // Podcast shows have "MPSP..." ids; anything else is an album.
+            val isPodcast = effectiveAlbum?.id?.startsWith("MPSP") == true
 
             Material3MenuGroup(
                 items =
@@ -495,7 +512,7 @@ fun PlayerMenu(
                                     title = { Text(text = stringResource(R.string.view_artist)) },
                                     description = {
                                         Text(
-                                            text = mediaMetadata.artists.joinToString { it.name },
+                                            text = effectiveArtists.joinToString { it.name },
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
@@ -508,8 +525,8 @@ fun PlayerMenu(
                                         )
                                     },
                                     onClick = {
-                                        if (mediaMetadata.artists.size == 1) {
-                                            navController.navigate("artist/${mediaMetadata.artists[0].id}")
+                                        if (artists.size == 1) {
+                                            navController.navigate("artist/${artists[0].id}")
                                             playerBottomSheetState.collapseSoft()
                                             onDismiss()
                                         } else {
@@ -519,13 +536,13 @@ fun PlayerMenu(
                                 ),
                             )
                         }
-                        if (mediaMetadata.album != null) {
+                        if (effectiveAlbum != null) {
                             add(
                                 Material3MenuItemData(
                                     title = { Text(text = stringResource(if (isPodcast) R.string.view_podcast else R.string.view_album)) },
                                     description = {
                                         Text(
-                                            text = mediaMetadata.album.title,
+                                            text = effectiveAlbum.title,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
@@ -539,9 +556,9 @@ fun PlayerMenu(
                                     },
                                     onClick = {
                                         if (isPodcast) {
-                                            navController.navigate("online_podcast/${mediaMetadata.album.id}")
+                                            navController.navigate("online_podcast/${effectiveAlbum.id}")
                                         } else {
-                                            navController.navigate("album/${mediaMetadata.album.id}")
+                                            navController.navigate("album/${effectiveAlbum.id}")
                                         }
                                         playerBottomSheetState.collapseSoft()
                                         onDismiss()

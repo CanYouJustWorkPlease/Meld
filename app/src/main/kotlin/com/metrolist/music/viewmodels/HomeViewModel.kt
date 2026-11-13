@@ -5,6 +5,7 @@
 
 package com.metrolist.music.viewmodels
 
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -1027,16 +1028,22 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             context.dataStore.data
                 .map {
-                    Triple(
+                    listOf(
                         !it[InnerTubeCookieKey].isNullOrEmpty(),
                         !it[SpotifyAccessTokenKey].isNullOrEmpty(),
                         it[EnableSpotifyKey] ?: false,
+                        it[UseSpotifyHomeKey] ?: false,
+                        it[SpotifyHomeOnlyKey] ?: false,
                     )
                 }
                 .distinctUntilChanged()
                 .drop(1)
-                .collect {
+                .collectLatest {
+                    // Wait for toggles to settle and for any running refresh, then rebuild the
+                    // default home (leaving a selected chip so the change is actually visible).
                     kotlinx.coroutines.delay(600)
+                    while (isRefreshing.value || isLoading.value) kotlinx.coroutines.delay(300)
+                    if (selectedChip.value != null) selectedChip.value = null
                     refresh()
                 }
         }

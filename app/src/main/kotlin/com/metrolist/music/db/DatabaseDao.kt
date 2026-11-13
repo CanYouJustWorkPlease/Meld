@@ -377,7 +377,7 @@ interface DatabaseDao {
     ): Flow<List<Song>>
 
     @Transaction
-    @Query("SELECT * FROM song WHERE liked = 1")
+    @Query("SELECT * FROM song WHERE liked = 1 ORDER BY likedDate DESC, rowId DESC")
     fun allLikedSongs(): Flow<List<Song>>
 
     @Transaction

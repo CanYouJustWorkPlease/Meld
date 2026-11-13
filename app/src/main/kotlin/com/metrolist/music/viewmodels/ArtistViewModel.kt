@@ -126,12 +126,27 @@ class ArtistViewModel @Inject constructor(
                     ?.filter { album ->
                         album.artists?.any { it.id in ids || it.name.lowercase() in names } == true
                     }.orEmpty()
+            // A song on the same album as a page song this artist is credited on, by someone who is
+            // also credited on that page song (e.g. a collaborator), belongs here too.
+            val creditedPageSongs =
+                pageSongs.filter { ps -> ps.artists.any { it.id in ids || it.name.lowercase() in names } }
             val ownAlbumIds = ownAlbums.map { it.id }.toSet()
             val ownAlbumNames = ownAlbums.map { SameTrack.norm(it.title) }.filter { it.isNotEmpty() }.toSet()
             SameTrack.dedupe(
                 liked.filter { song ->
                     song.artists.any { it.id in ids || it.name.lowercase() in names } ||
                         pageSongs.any { SameTrack.matches(it, song) } ||
+                        creditedPageSongs.any { ps ->
+                            val sameAlbum =
+                                (ps.album?.id != null && ps.album?.id == song.song.albumId) ||
+                                    SameTrack.norm(ps.album?.name.orEmpty()).let {
+                                        it.isNotEmpty() && it == SameTrack.norm(song.song.albumName.orEmpty())
+                                    }
+                            sameAlbum &&
+                                ps.artists.any { a ->
+                                    song.artists.any { sa -> sa.name.equals(a.name, ignoreCase = true) }
+                                }
+                        } ||
                         song.song.albumId in ownAlbumIds ||
                         SameTrack.norm(song.song.albumName.orEmpty()).let { it.isNotEmpty() && it in ownAlbumNames }
                 },
