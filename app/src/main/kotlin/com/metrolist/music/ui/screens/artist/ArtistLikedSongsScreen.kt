@@ -5,6 +5,10 @@
 
 package com.metrolist.music.ui.screens.artist
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import com.metrolist.music.ui.component.Numbered
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -67,6 +71,9 @@ fun ArtistLikedSongsScreen(
     val songs by viewModel.likedSongs.collectAsStateWithLifecycle()
     val artistName = viewModel.artistPage?.artist?.title.orEmpty()
     val lazyListState = rememberLazyListState()
+    // Newest liked first by default; the button in the top bar flips it.
+    var newestFirst by rememberSaveable { mutableStateOf(true) }
+    val shownSongs = remember(songs, newestFirst) { if (newestFirst) songs else songs.reversed() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -94,7 +101,7 @@ fun ArtistLikedSongsScreen(
             }
 
             itemsIndexed(
-                items = songs,
+                items = shownSongs,
                 key = { index, item -> "${item.id}_$index" },
             ) { index, song ->
                 Numbered(index + 1) {
@@ -131,7 +138,7 @@ fun ArtistLikedSongsScreen(
                                         playerConnection.playQueue(
                                             ListQueue(
                                                 title = queueAllSongsStr,
-                                                items = songs.map { it.toMediaItem() },
+                                                items = shownSongs.map { it.toMediaItem() },
                                                 startIndex = index,
                                             ),
                                         )
@@ -154,6 +161,16 @@ fun ArtistLikedSongsScreen(
 
         TopAppBar(
             title = { Text(artistName) },
+            actions = {
+                androidx.compose.material3.TextButton(onClick = { newestFirst = !newestFirst }) {
+                    Text(stringResource(R.string.sort_by_create_date))
+                    Icon(
+                        painter = painterResource(if (newestFirst) R.drawable.arrow_downward else R.drawable.arrow_upward),
+                        contentDescription = null,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+            },
             navigationIcon = {
                 IconButton(
                     onClick = navController::navigateUp,

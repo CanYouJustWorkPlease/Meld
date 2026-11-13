@@ -116,6 +116,8 @@ fun SongMenu(
     onDismiss: () -> Unit,
     isFromCache: Boolean = false,
     spotifyId: String? = null,
+    /** False on an album's own page, where "View album" would just reopen it. */
+    showViewAlbum: Boolean = true,
 ) {
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -1066,7 +1068,7 @@ fun SongMenu(
                                 ),
                             )
                         }
-                        if (song.song.albumId != null) {
+                        if (showViewAlbum && song.song.albumId != null) {
                             // Show "View Podcast" for episodes, "View Album" for songs
                             val isPodcast = song.song.isEpisode
                             add(
@@ -1084,11 +1086,21 @@ fun SongMenu(
                                         )
                                     },
                                     onClick = {
-                                        onDismiss()
                                         if (isPodcast) {
+                                            onDismiss()
                                             navController.navigate("online_podcast/${song.song.albumId}")
                                         } else {
-                                            navController.navigate("album/${song.song.albumId}")
+                                            // The stored album can be wrong for this song: open the one that has it.
+                                            coroutineScope.launch {
+                                                val albumId =
+                                                    com.metrolist.music.utils.findAlbumContainingSong(
+                                                        song.song.title,
+                                                        song.orderedArtists.firstOrNull()?.name,
+                                                        song.song.albumId,
+                                                    ) ?: song.song.albumId
+                                                navController.navigate("album/$albumId")
+                                                onDismiss()
+                                            }
                                         }
                                     },
                                 ),

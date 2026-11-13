@@ -557,11 +557,22 @@ fun PlayerMenu(
                                     onClick = {
                                         if (isPodcast) {
                                             navController.navigate("online_podcast/${effectiveAlbum.id}")
+                                            playerBottomSheetState.collapseSoft()
+                                            onDismiss()
                                         } else {
-                                            navController.navigate("album/${effectiveAlbum.id}")
+                                            // The stored album can be wrong for this song: open the one that has it.
+                                            coroutineScope.launch {
+                                                val albumId =
+                                                    com.metrolist.music.utils.findAlbumContainingSong(
+                                                        mediaMetadata.title,
+                                                        mediaMetadata.artists.firstOrNull()?.name,
+                                                        effectiveAlbum.id,
+                                                    ) ?: effectiveAlbum.id
+                                                navController.navigate("album/$albumId")
+                                                playerBottomSheetState.collapseSoft()
+                                                onDismiss()
+                                            }
                                         }
-                                        playerBottomSheetState.collapseSoft()
-                                        onDismiss()
                                     },
                                 ),
                             )

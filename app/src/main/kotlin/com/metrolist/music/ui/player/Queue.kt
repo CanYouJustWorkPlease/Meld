@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.player
 
+import com.metrolist.music.ui.component.Numbered
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -833,7 +834,8 @@ fun Queue(
                                 horizontalArrangement = Arrangement.Center,
                                 modifier = Modifier.animateItem(),
                             ) {
-                                MediaMetadataListItem(
+                                Numbered(index + 1) {
+                                    MediaMetadataListItem(
                                     mediaMetadata = window.mediaItem.metadata!!,
                                     isSelected = false,
                                     isActive = isActive,
@@ -927,6 +929,7 @@ fun Queue(
                                                 },
                                             ),
                                 )
+                                }
                             }
                         }
 

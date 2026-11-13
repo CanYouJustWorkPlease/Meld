@@ -426,6 +426,7 @@ fun AlbumScreen(
                                             SongMenu(
                                                 originalSong = song,
                                                 onDismiss = menuState::dismiss,
+                                                showViewAlbum = false,
                                             )
                                         }
                                     },

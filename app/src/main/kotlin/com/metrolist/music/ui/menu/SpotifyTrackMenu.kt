@@ -82,6 +82,8 @@ fun SpotifyTrackMenu(
     /** Non-null shows a heart in the header to like/unlike the track on Spotify. */
     isLiked: Boolean? = null,
     onLikeChanged: ((Boolean) -> Unit)? = null,
+    /** False on the album's own page, where "View album" would just reopen it. */
+    showViewAlbum: Boolean = true,
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
@@ -384,7 +386,7 @@ fun SpotifyTrackMenu(
         },
     )
 
-    if (navController != null && (track.artists.isNotEmpty() || track.album?.id?.isNotBlank() == true)) {
+    if (navController != null && (track.artists.isNotEmpty() || (showViewAlbum && track.album?.id?.isNotBlank() == true))) {
         Material3MenuGroup(
             items = buildList {
                 if (track.artists.isNotEmpty()) {
@@ -408,7 +410,7 @@ fun SpotifyTrackMenu(
                         ),
                     )
                 }
-                track.album?.takeIf { it.id.isNotBlank() }?.let { album ->
+                track.album?.takeIf { showViewAlbum && it.id.isNotBlank() }?.let { album ->
                     add(
                         Material3MenuItemData(
                             title = { Text(text = stringResource(R.string.view_album)) },

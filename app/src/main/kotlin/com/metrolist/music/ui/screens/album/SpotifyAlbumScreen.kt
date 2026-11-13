@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.album
 
+import com.metrolist.music.ui.menu.SpotifyTrackMenu
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,7 @@ fun SpotifyAlbumScreen(
     viewModel: SpotifyAlbumViewModel = hiltViewModel(),
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
+    val menuState = com.metrolist.music.ui.component.LocalMenuState.current
     val database = LocalDatabase.current
 
     val album by viewModel.album.collectAsState()
@@ -280,6 +282,26 @@ fun SpotifyAlbumScreen(
                             shape = RoundedCornerShape(ThumbnailCornerRadius),
                             modifier = Modifier.size(ListThumbnailSize),
                         )
+                    },
+                    trailingContent = {
+                        androidx.compose.material3.IconButton(
+                            onClick = {
+                                menuState.show {
+                                    SpotifyTrackMenu(
+                                        track = track,
+                                        mapper = viewModel.mapper,
+                                        onDismiss = menuState::dismiss,
+                                        navController = navController,
+                                        showViewAlbum = false,
+                                    )
+                                }
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.more_vert),
+                                contentDescription = null,
+                            )
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
