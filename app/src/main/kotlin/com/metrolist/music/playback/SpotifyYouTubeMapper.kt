@@ -51,7 +51,8 @@ class SpotifyYouTubeMapper(
         }
 
         // 2. Room DB cache
-        val cached = database.getSpotifyMatch(track.id)
+        purgeWeakMatchesOnce()
+        val cached = database.getSpotifyMatch(track.id)?.takeIf { it.isManualOverride || it.matchScore >= WEAK_MATCH_SCORE }
         if (cached != null) {
             Timber.d("Spotify match cache hit: ${track.name} -> ${cached.youtubeId} (manual=${cached.isManualOverride})")
             memoryCache.put(track.id, CachedMatch(
@@ -276,7 +277,8 @@ class SpotifyYouTubeMapper(
         durationSec: Int = -1,
         album: String? = null,
     ): String? = withContext(Dispatchers.IO) {
-        database.getSpotifyMatchByYouTubeId(youtubeId)?.let { cached ->
+        purgeWeakMatchesOnce()
+        database.getSpotifyMatchByYouTubeId(youtubeId)?.takeIf { it.isManualOverride || it.matchScore >= WEAK_MATCH_SCORE }?.let { cached ->
             Timber.d("Reverse lookup cache hit: $youtubeId -> spotify:track:${cached.spotifyId}")
             return@withContext "spotify:track:${cached.spotifyId}"
         }
@@ -355,6 +357,20 @@ class SpotifyYouTubeMapper(
         null
     }
 
+    @Volatile
+    private var weakMatchesPurged = false
+
+    /**
+     * Matches made with the old, lenient scoring could pair a YouTube song with a different Spotify
+     * track by the same artist (and then overwrote the right pairing), so a song showed another
+     * song's title/album. Drop the low-scoring ones once so they are matched again, strictly.
+     */
+    private fun purgeWeakMatchesOnce() {
+        if (weakMatchesPurged) return
+        weakMatchesPurged = true
+        runCatching { database.deleteWeakSpotifyMatches(WEAK_MATCH_SCORE) }
+    }
+
     /** True when two titles are the same song title (case, punctuation and brackets aside). */
     private fun titlesClose(a: String, b: String): Boolean {
         fun clean(t: String) =
@@ -375,6 +391,7 @@ class SpotifyYouTubeMapper(
 
     companion object {
         private const val MIN_MATCH_THRESHOLD = 0.35
+        private const val WEAK_MATCH_SCORE = 0.6
         private const val MEM_CACHE_MAX_SIZE = 512
 
         /** Per-marker ranking penalty for non-studio variants, capped by [MAX_VARIANT_PENALTY]. */

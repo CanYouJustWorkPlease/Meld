@@ -2215,6 +2215,9 @@ interface DatabaseDao {
     @Query("DELETE FROM spotify_match WHERE spotifyId = :spotifyId")
     fun deleteSpotifyMatch(spotifyId: String)
 
+    @Query("DELETE FROM spotify_match WHERE matchScore < :maxScore AND isManualOverride = 0")
+    fun deleteWeakSpotifyMatches(maxScore: Double)
+
     // Qobuz match cache
 
     @Query("SELECT isrc FROM song WHERE id = :songId LIMIT 1")
