@@ -192,12 +192,22 @@ fun YouTubeAlbumMenu(
         mutableStateOf(false)
     }
 
+    // The artists shown in the menu come from the album item; the saved album (empty for an album
+    // that was only seen in search results) used to be the dialog's only source, so it opened empty.
+    val dialogArtists =
+        remember(albumItem.artists, album) {
+            albumItem.artists.orEmpty()
+                .mapNotNull { a -> a.id?.let { MenuArtist(it, a.name) } }
+                .ifEmpty { album?.artists.orEmpty().map { MenuArtist(it.id, it.name) } }
+                .distinctBy { it.id }
+        }
+
     if (showSelectArtistDialog) {
         ListDialog(
             onDismiss = { showSelectArtistDialog = false },
         ) {
             items(
-                items = album?.artists.orEmpty().distinctBy { it.id },
+                items = dialogArtists,
                 key = { "menu_yt_album_artist_${it.id}" },
             ) { artist ->
                 Row(
@@ -541,3 +551,8 @@ fun YouTubeAlbumMenu(
         }
     }
 }
+
+private data class MenuArtist(
+    val id: String,
+    val name: String,
+)

@@ -578,8 +578,15 @@ fun OnlineSearchResult(
                                 items = summary.items,
                                 key = { index, item -> "${summary.title}/${item.id}/$index" },
                                 itemContent = { index, item ->
-                                    if (item is SongItem) {
-                                        Numbered(summary.items.take(index + 1).count { it is SongItem }) {
+                                    if (item is SongItem || item is AlbumItem) {
+                                        // Count within the section, among items of the same kind.
+                                        val position =
+                                            if (item is SongItem) {
+                                                summary.items.take(index + 1).count { it is SongItem }
+                                            } else {
+                                                summary.items.take(index + 1).count { it is AlbumItem }
+                                            }
+                                        Numbered(position) {
                                             ytItemContent(item)
                                         }
                                     } else {
@@ -602,7 +609,7 @@ fun OnlineSearchResult(
                             items = itemsPage?.items.orEmpty().distinctBy { it.id },
                             key = { _, it -> "filtered_${it.id}" },
                             itemContent = { index, item ->
-                                if (item is SongItem) {
+                                if (item is SongItem || item is AlbumItem) {
                                     Numbered(index + 1) { ytItemContent(item) }
                                 } else {
                                     ytItemContent(item)

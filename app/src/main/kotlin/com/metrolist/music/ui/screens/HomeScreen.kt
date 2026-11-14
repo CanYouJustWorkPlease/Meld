@@ -1237,7 +1237,7 @@ fun HomeScreen(
     // With the Spotify home on, Mood and Genres goes right before "Popular radio"; without that
     // section, right after "Recently played" or else "Recommended for today".
     val moodSpotifyIndex: Int? =
-        remember(spotifyHomeSections) {
+        remember(spotifyHomeSections, isSpotifyHomeOnly) {
             val sections = spotifyHomeSections ?: return@remember null
             fun indexOf(title: String) = sections.indexOfFirst { it.title.contains(title, ignoreCase = true) }
             val popularRadio = indexOf("popular radio")
@@ -1245,11 +1245,16 @@ fun HomeScreen(
                 popularRadio
             } else {
                 val after = maxOf(indexOf("recently played"), indexOf("recommended for today"))
-                if (after >= 0) after + 1 else null
+                when {
+                    after >= 0 -> after + 1
+                    // Spotify-only has no other place for it: put it at the end.
+                    isSpotifyHomeOnly -> sections.size
+                    else -> null
+                }
             }
         }
     val moodInSpotify =
-        isSpotifyHome && spotifyHomeSections != null && !isSpotifyHomeOnly && moodSpotifyIndex != null &&
+        isSpotifyHome && spotifyHomeSections != null && moodSpotifyIndex != null &&
             explorePage?.moodAndGenres != null &&
             selectedChip?.title?.contains("Podcast", ignoreCase = true) != true
 

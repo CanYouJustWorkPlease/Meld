@@ -657,7 +657,8 @@ class HomeViewModel @Inject constructor(
         // alongside Spotify home sections, but never in Spotify-only mode.
         // dailyDiscover, communityPlaylists and similarRecommendations already ran
         // synchronously above (gated by !isSpotifyOnly); they are no longer re-run here.
-        if (!isSpotifyOnly) {
+        // Also loaded in Spotify-only mode: Mood and Genres is shown among the Spotify sections.
+        run {
             viewModelScope.launch(Dispatchers.IO) {
                 YouTube.explore().onSuccess { page ->
                     explorePage.value = page.copy(
@@ -739,7 +740,6 @@ class HomeViewModel @Inject constructor(
         if (sections.isEmpty()) Timber.w("spotifyHome: flow set to NULL — UI will show nothing")
 
         homePage.value = null
-        explorePage.value = null
     }
 
     /**
