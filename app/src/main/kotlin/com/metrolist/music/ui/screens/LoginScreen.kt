@@ -306,6 +306,8 @@ fun LoginScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { webViewContext ->
                 WebView(webViewContext).apply {
+                    // Black instead of the default white until the page has painted.
+                    setBackgroundColor(android.graphics.Color.BLACK)
                     webViewClient =
                         object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(

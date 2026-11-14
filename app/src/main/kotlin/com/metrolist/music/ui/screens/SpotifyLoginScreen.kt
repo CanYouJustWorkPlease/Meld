@@ -129,6 +129,8 @@ fun SpotifyLoginScreen(navController: NavController) {
                     cookieManager.flush()
 
                     WebView(ctx).apply {
+                        // Black instead of the default white until the page has painted.
+                        setBackgroundColor(android.graphics.Color.BLACK)
                         cookieManager.setAcceptThirdPartyCookies(this, true)
 
                         settings.javaScriptEnabled = true
@@ -877,53 +879,28 @@ private const val USER_AGENT_DESKTOP =
 /**
  * Spotify's login page offers e-mail + Google/Facebook/Apple. This adds a "Continue with email and
  * password" button (a copy of the Google button, so it looks the same) above "Continue with
- * Google". It does what a person would do: submit the e-mail address with "Continue" and, on the
- * next page, press "Log in with a password". (Opening the password page directly shows a blank
- * page.) The page is a single-page app, so everything re-runs whenever the DOM changes.
+ * Google". The login page shows the classic e-mail + password form when it is opened with the
+ * `allow_password=1` query parameter, so the button reloads the current login page with it. The
+ * page is a single-page app, so the button is re-added whenever the DOM changes.
  */
 private val EMAIL_PASSWORD_BUTTON_JS =
     """
     (function () {
-      var FLAG = 'meldPasswordFlow';
-      function textOf(el) { return (el.textContent || '').replace(/\s+/g, ' ').trim(); }
-      function clickables() { return document.querySelectorAll('button, a, [role="button"]'); }
-      function findByText(re) {
-        var els = clickables();
-        for (var i = 0; i < els.length; i++) { if (re.test(textOf(els[i]))) return els[i]; }
+      function findGoogle() {
+        var els = document.querySelectorAll('button, a, [role="button"]');
+        for (var i = 0; i < els.length; i++) {
+          if (/continue with google/i.test(els[i].textContent || '')) return els[i];
+        }
         return null;
       }
-      function emailField() {
-        return document.querySelector('input[type="email"], input[name="username"], input#username, input[autocomplete="username"], input[data-testid="login-username"]')
-          || document.querySelector('input[type="text"]');
-      }
-      function startFlow() {
-        var email = emailField();
-        if (!email || !email.value || !email.value.trim()) {
-          // The e-mail address is needed first.
-          if (email) email.focus();
-          return;
-        }
-        sessionStorage.setItem(FLAG, '1');
-        var next = findByText(/^continue$/i);
-        if (next) next.click();
-      }
-      function advance() {
-        if (sessionStorage.getItem(FLAG) !== '1') return;
-        if (document.querySelector('input[type="password"]')) {
-          // Already on the password page: done.
-          sessionStorage.removeItem(FLAG);
-          return;
-        }
-        var link = findByText(/^log in with a password$/i);
-        if (link) {
-          sessionStorage.removeItem(FLAG);
-          link.click();
-        }
+      function openClassicLogin() {
+        var url = new URL(window.location.href);
+        url.searchParams.set('allow_password', '1');
+        window.location.assign(url.toString());
       }
       function inject() {
-        advance();
         if (document.getElementById('meld-email-password-btn')) return;
-        var google = findByText(/continue with google/i);
+        var google = findGoogle();
         if (!google) return;
         var target = google.closest('li') || google;
         var wrap = target.cloneNode(true);
@@ -935,7 +912,7 @@ private val EMAIL_PASSWORD_BUTTON_JS =
         wrap.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          startFlow();
+          openClassicLogin();
         }, true);
         target.parentNode.insertBefore(wrap, target);
       }

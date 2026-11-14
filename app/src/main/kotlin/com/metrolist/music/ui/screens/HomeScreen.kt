@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens
 
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -1194,6 +1195,63 @@ fun HomeScreen(
     LaunchedEffect(forgottenFavorites) {
         forgottenFavoritesLazyGridState.scrollToItem(0)
     }
+
+    // Mood and Genres, as list items (used both in its normal place and inside the Spotify home).
+    val renderMood: LazyListScope.() -> Unit = {
+                            explorePage?.moodAndGenres?.let { moodAndGenres ->
+                                item(key = "mood_and_genres_title") {
+                                    NavigationTitle(
+                                        title = stringResource(R.string.mood_and_genres),
+                                        onClick = {
+                                            navController.navigate("mood_and_genres")
+                                        },
+                                    )
+                                }
+                                item(key = "mood_and_genres_list") {
+                                    LazyHorizontalGrid(
+                                        rows = GridCells.Fixed(4),
+                                        contentPadding = PaddingValues(6.dp),
+                                        modifier =
+                                            Modifier
+                                                .height((MoodAndGenresButtonHeight + 12.dp) * 4 + 12.dp),
+                                    ) {
+                                        items(moodAndGenres.distinctBy { "${it.title}_${it.endpoint.browseId}_${it.endpoint.params}" }, key = { "${it.title}_${it.endpoint.browseId}_${it.endpoint.params}" }) {
+                                            MoodAndGenresButton(
+                                                title = it.title,
+                                                onClick = {
+                                                    navController.navigate(
+                                                        "youtube_browse/${it.endpoint.browseId}?params=${it.endpoint.params}",
+                                                    )
+                                                },
+                                                modifier =
+                                                    Modifier
+                                                        .padding(6.dp)
+                                                        .width(180.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+    }
+
+    // With the Spotify home on, Mood and Genres goes right before "Popular radio"; without that
+    // section, right after "Recently played" or else "Recommended for today".
+    val moodSpotifyIndex: Int? =
+        remember(spotifyHomeSections) {
+            val sections = spotifyHomeSections ?: return@remember null
+            fun indexOf(title: String) = sections.indexOfFirst { it.title.contains(title, ignoreCase = true) }
+            val popularRadio = indexOf("popular radio")
+            if (popularRadio >= 0) {
+                popularRadio
+            } else {
+                val after = maxOf(indexOf("recently played"), indexOf("recommended for today"))
+                if (after >= 0) after + 1 else null
+            }
+        }
+    val moodInSpotify =
+        isSpotifyHome && spotifyHomeSections != null && !isSpotifyHomeOnly && moodSpotifyIndex != null &&
+            explorePage?.moodAndGenres != null &&
+            selectedChip?.title?.contains("Podcast", ignoreCase = true) != true
 
     PullToRefreshBox(
         state = pullRefreshState,
@@ -2586,40 +2644,8 @@ fun HomeScreen(
                             if (selectedChip?.title?.contains("Podcast", ignoreCase = true) == true) {
                                 return@forEach
                             }
-                            explorePage?.moodAndGenres?.let { moodAndGenres ->
-                                item(key = "mood_and_genres_title") {
-                                    NavigationTitle(
-                                        title = stringResource(R.string.mood_and_genres),
-                                        onClick = {
-                                            navController.navigate("mood_and_genres")
-                                        },
-                                    )
-                                }
-                                item(key = "mood_and_genres_list") {
-                                    LazyHorizontalGrid(
-                                        rows = GridCells.Fixed(4),
-                                        contentPadding = PaddingValues(6.dp),
-                                        modifier =
-                                            Modifier
-                                                .height((MoodAndGenresButtonHeight + 12.dp) * 4 + 12.dp),
-                                    ) {
-                                        items(moodAndGenres.distinctBy { "${it.title}_${it.endpoint.browseId}_${it.endpoint.params}" }, key = { "${it.title}_${it.endpoint.browseId}_${it.endpoint.params}" }) {
-                                            MoodAndGenresButton(
-                                                title = it.title,
-                                                onClick = {
-                                                    navController.navigate(
-                                                        "youtube_browse/${it.endpoint.browseId}?params=${it.endpoint.params}",
-                                                    )
-                                                },
-                                                modifier =
-                                                    Modifier
-                                                        .padding(6.dp)
-                                                        .width(180.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            // With the Spotify home on, Mood and Genres is placed among its sections.
+                            if (!moodInSpotify) renderMood()
                         }
                     }
                 }
@@ -2627,6 +2653,7 @@ fun HomeScreen(
                 // Spotify Home Sections (shown when Spotify home is active)
                 if (isSpotifyHome && spotifyHomeSections != null) {
                     spotifyHomeSections?.forEachIndexed { index, section ->
+                        if (moodInSpotify && index == moodSpotifyIndex) renderMood()
                         item(key = "spotify_section_title_$index") {
                             NavigationTitle(
                                 title = resolveSpotifySectionTitle(section),
@@ -2739,6 +2766,7 @@ fun HomeScreen(
                             }
                         }
                     }
+                    if (moodInSpotify && moodSpotifyIndex == (spotifyHomeSections?.size ?: -1)) renderMood()
                 }
 
                 // Only show shimmer during initial loading, not for pagination
